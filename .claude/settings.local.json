@@ -8,7 +8,8 @@
       "Bash(cp:*)",
       "Bash(export:*)",
       "Bash(swift run:*)",
-      "Bash(swift:*)"
+      "Bash(swift:*)",
+      "Bash(./build/outlinetool:*)"
     ],
     "deny": []
   }

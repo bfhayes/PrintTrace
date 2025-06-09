@@ -17,10 +17,30 @@ namespace {
         if (params) {
             cpp_params.warpSize = params->warp_size;
             cpp_params.realWorldSizeMM = params->real_world_size_mm;
-            cpp_params.thresholdValue = params->threshold_value;
-            cpp_params.noiseKernelSize = params->noise_kernel_size;
-            cpp_params.blurSize = params->blur_size;
+            
+            // New CAD-optimized parameters
+            cpp_params.cannyLower = params->canny_lower;
+            cpp_params.cannyUpper = params->canny_upper;
+            cpp_params.cannyAperture = params->canny_aperture;
+            
+            cpp_params.claheClipLimit = params->clahe_clip_limit;
+            cpp_params.claheTileSize = params->clahe_tile_size;
+            
+            cpp_params.minContourArea = params->min_contour_area;
+            cpp_params.minSolidity = params->min_solidity;
+            cpp_params.maxAspectRatio = params->max_aspect_ratio;
+            
             cpp_params.polygonEpsilonFactor = params->polygon_epsilon_factor;
+            
+            cpp_params.enableSubPixelRefinement = params->enable_subpixel_refinement;
+            cpp_params.cornerWinSize = params->corner_win_size;
+            
+            cpp_params.validateClosedContour = params->validate_closed_contour;
+            cpp_params.minPerimeter = params->min_perimeter;
+            
+            cpp_params.dilationAmountMM = params->dilation_amount_mm;
+            
+            cpp_params.enableDebugOutput = params->enable_debug_output;
         }
         return cpp_params;
     }
@@ -79,15 +99,43 @@ void outline_tool_get_default_params(OutlineToolParams* params) {
     
     params->warp_size = 3240;
     params->real_world_size_mm = 162.0;
-    params->threshold_value = 127;
-    params->noise_kernel_size = 21;
-    params->blur_size = 101;
-    params->polygon_epsilon_factor = 0.02;
+    
+    // CAD-optimized edge detection parameters
+    params->canny_lower = 50.0;
+    params->canny_upper = 150.0;
+    params->canny_aperture = 3;
+    
+    // CLAHE lighting normalization
+    params->clahe_clip_limit = 2.0;
+    params->clahe_tile_size = 8;
+    
+    // Enhanced contour filtering (more permissive for real images)
+    params->min_contour_area = 500.0;
+    params->min_solidity = 0.3;
+    params->max_aspect_ratio = 20.0;
+    
+    // Higher precision polygon approximation for CAD
+    params->polygon_epsilon_factor = 0.005;
+    
+    // Sub-pixel refinement for accuracy
+    params->enable_subpixel_refinement = true;
+    params->corner_win_size = 5;
+    
+    // Validation settings
+    params->validate_closed_contour = true;
+    params->min_perimeter = 100.0;
+    
+    // Tolerance/dilation settings
+    params->dilation_amount_mm = 0.0;
+    
+    // Debug settings
+    params->enable_debug_output = false;
 }
 
 OutlineToolResult outline_tool_validate_params(const OutlineToolParams* params) {
     if (!params) return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
     
+    // Basic parameters
     if (params->warp_size <= 0 || params->warp_size > 10000) {
         return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
     }
@@ -96,19 +144,56 @@ OutlineToolResult outline_tool_validate_params(const OutlineToolParams* params) 
         return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->threshold_value < 0 || params->threshold_value > 255) {
+    // Canny edge detection parameters
+    if (params->canny_lower < 0.0 || params->canny_lower > 500.0 ||
+        params->canny_upper < 0.0 || params->canny_upper > 500.0 ||
+        params->canny_lower >= params->canny_upper) {
         return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->noise_kernel_size < 3 || params->noise_kernel_size > 51 || params->noise_kernel_size % 2 == 0) {
+    if (params->canny_aperture < 3 || params->canny_aperture > 7 || params->canny_aperture % 2 == 0) {
         return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->blur_size < 3 || params->blur_size > 201 || params->blur_size % 2 == 0) {
+    // CLAHE parameters
+    if (params->clahe_clip_limit < 0.1 || params->clahe_clip_limit > 10.0) {
         return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->polygon_epsilon_factor < 0.001 || params->polygon_epsilon_factor > 0.1) {
+    if (params->clahe_tile_size < 2 || params->clahe_tile_size > 32) {
+        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Contour filtering parameters
+    if (params->min_contour_area < 10.0 || params->min_contour_area > 1000000.0) {
+        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+    }
+    
+    if (params->min_solidity < 0.1 || params->min_solidity > 1.0) {
+        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+    }
+    
+    if (params->max_aspect_ratio < 1.0 || params->max_aspect_ratio > 50.0) {
+        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Polygon approximation
+    if (params->polygon_epsilon_factor < 0.0001 || params->polygon_epsilon_factor > 0.1) {
+        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Sub-pixel refinement
+    if (params->corner_win_size < 3 || params->corner_win_size > 15) {
+        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Validation parameters
+    if (params->min_perimeter < 10.0 || params->min_perimeter > 10000.0) {
+        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Dilation parameters
+    if (params->dilation_amount_mm < 0.0 || params->dilation_amount_mm > 50.0) {
         return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
     }
     
@@ -159,50 +244,23 @@ OutlineToolResult outline_tool_process_image_to_contour(
     }
     
     try {
-        reportProgress(progress_callback, 0.0, "Starting image processing");
+        reportProgress(progress_callback, 0.0, "Starting CAD-optimized image processing");
         
         // Convert parameters
         ImageProcessor::ProcessingParams cpp_params = convertParams(params);
         double pixels_per_mm = static_cast<double>(cpp_params.warpSize) / cpp_params.realWorldSizeMM;
         
-        reportProgress(progress_callback, 0.1, "Loading image");
+        reportProgress(progress_callback, 0.1, "Loading and processing image");
         
-        // Load and validate image
-        cv::Mat img = ImageProcessor::loadImage(input_path);
-        
-        reportProgress(progress_callback, 0.2, "Converting to grayscale");
-        
-        // Convert to grayscale and threshold
-        cv::Mat gray = ImageProcessor::convertToGrayscale(img);
-        cv::Mat binary = ImageProcessor::thresholdImage(gray, cpp_params.thresholdValue);
-        
-        reportProgress(progress_callback, 0.3, "Finding document boundary");
-        
-        // Find largest contour (document boundary)
-        std::vector<cv::Point> largestContour = ImageProcessor::findLargestContour(binary);
-        std::vector<cv::Point> approxPoly = ImageProcessor::approximatePolygon(largestContour, cpp_params.polygonEpsilonFactor);
-        
-        reportProgress(progress_callback, 0.4, "Applying perspective correction");
-        
-        // Warp image
-        auto [warped, actual_ppm] = ImageProcessor::warpImage(binary, approxPoly, cpp_params.warpSize, cpp_params.realWorldSizeMM);
-        
-        reportProgress(progress_callback, 0.6, "Reducing noise");
-        
-        // Remove noise
-        cv::Mat cleaned = ImageProcessor::removeNoise(warped, cpp_params.noiseKernelSize, cpp_params.blurSize, cpp_params.thresholdValue);
-        
-        reportProgress(progress_callback, 0.8, "Extracting object contour");
-        
-        // Find main contour
-        std::vector<cv::Point> objectContour = ImageProcessor::findMainContour(cleaned);
+        // Use the new improved pipeline
+        std::vector<cv::Point> objectContour = ImageProcessor::processImageToContour(input_path, cpp_params);
         
         reportProgress(progress_callback, 0.9, "Converting contour data");
         
         // Convert contour to C format
-        convertContour(objectContour, actual_ppm, contour);
+        convertContour(objectContour, pixels_per_mm, contour);
         
-        reportProgress(progress_callback, 1.0, "Processing complete");
+        reportProgress(progress_callback, 1.0, "CAD-optimized processing complete");
         
         return OUTLINE_TOOL_SUCCESS;
         

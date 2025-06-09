@@ -11,6 +11,8 @@ struct Arguments {
     string outputPath;
     bool valid = false;
     bool verbose = false;
+    bool debug = false;
+    double dilationMM = 0.0;
 };
 
 Arguments parseArguments(int argc, char* argv[]) {
@@ -28,6 +30,10 @@ Arguments parseArguments(int argc, char* argv[]) {
             args.outputPath = argv[++i];
         } else if (arg == "-v" || arg == "--verbose") {
             args.verbose = true;
+        } else if (arg == "-d" || arg == "--debug") {
+            args.debug = true;
+        } else if ((arg == "-t" || arg == "--tolerance") && (i + 1 < argc)) {
+            args.dilationMM = stod(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             return args; // Will trigger usage display
         }
@@ -62,13 +68,17 @@ void printUsage(const char* progName) {
          << "\n"
          << "Optional:\n"
          << "  -o, --output  Output DXF file path (auto-generated if not specified)\n"
+         << "  -t, --tolerance <mm>  Add tolerance/clearance in millimeters for 3D printing (default: 0.0)\n"
          << "  -v, --verbose Enable verbose output\n"
+         << "  -d, --debug   Enable debug visualization (saves step-by-step images)\n"
          << "  -h, --help    Show this help message\n"
          << "\n"
          << "Examples:\n"
          << "  " << progName << " -i photo.jpg\n"
          << "  " << progName << " -i photo.jpg -o drawing.dxf\n"
+         << "  " << progName << " -i photo.jpg -t 0.5  # Add 0.5mm tolerance for 3D printing\n"
          << "  " << progName << " -i photo.jpg -v\n"
+         << "  " << progName << " -i photo.jpg -d  # Saves debug images to ./debug/\n"
          << endl;
 }
 
@@ -110,6 +120,18 @@ int main(int argc, char* argv[]) {
     // Get default parameters
     OutlineToolParams params;
     outline_tool_get_default_params(&params);
+    
+    // Enable debug output if requested
+    if (args.debug) {
+        params.enable_debug_output = true;
+        cout << "[INFO] Debug mode enabled - images will be saved to ./debug/" << endl;
+    }
+    
+    // Set tolerance for 3D printing if requested
+    if (args.dilationMM > 0.0) {
+        params.dilation_amount_mm = args.dilationMM;
+        cout << "[INFO] 3D printing tolerance enabled: " << args.dilationMM << "mm" << endl;
+    }
 
     // Validate parameters
     OutlineToolResult validation_result = outline_tool_validate_params(&params);
@@ -119,13 +141,16 @@ int main(int argc, char* argv[]) {
     }
 
     if (args.verbose) {
-        cout << "[INFO] Using parameters:" << endl;
+        cout << "[INFO] Using CAD-optimized parameters:" << endl;
         cout << "  Warp size: " << params.warp_size << "px" << endl;
         cout << "  Real world size: " << params.real_world_size_mm << "mm" << endl;
-        cout << "  Threshold: " << params.threshold_value << endl;
-        cout << "  Noise kernel: " << params.noise_kernel_size << "px" << endl;
-        cout << "  Blur kernel: " << params.blur_size << "px" << endl;
+        cout << "  Canny edges: " << params.canny_lower << "-" << params.canny_upper << endl;
+        cout << "  CLAHE clip limit: " << params.clahe_clip_limit << endl;
+        cout << "  Min contour area: " << params.min_contour_area << endl;
+        cout << "  Min solidity: " << params.min_solidity << endl;
         cout << "  Polygon epsilon: " << params.polygon_epsilon_factor << endl;
+        cout << "  Sub-pixel refinement: " << (params.enable_subpixel_refinement ? "enabled" : "disabled") << endl;
+        cout << "  3D printing tolerance: " << params.dilation_amount_mm << "mm" << endl;
         
         double estimated_time = outline_tool_estimate_processing_time(args.inputPath.c_str());
         if (estimated_time > 0) {

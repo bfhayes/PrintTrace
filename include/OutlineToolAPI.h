@@ -28,14 +28,41 @@ typedef enum {
     OUTLINE_TOOL_ERROR_PROCESSING_FAILED = -10
 } OutlineToolResult;
 
-// Processing parameters structure
+// Processing parameters structure (CAD-optimized)
 typedef struct {
     int32_t warp_size;              // Target image size after perspective correction (default: 3240)
     double real_world_size_mm;      // Real-world size in millimeters (default: 162.0)
-    int32_t threshold_value;        // Binary threshold value 0-255 (default: 127)
-    int32_t noise_kernel_size;      // Morphological kernel size (default: 21)
-    int32_t blur_size;             // Gaussian blur kernel size (default: 101)
-    double polygon_epsilon_factor; // Polygon approximation factor (default: 0.02)
+    
+    // Edge detection parameters (replacing threshold)
+    double canny_lower;             // Canny lower threshold (default: 50.0)
+    double canny_upper;             // Canny upper threshold (default: 150.0)
+    int32_t canny_aperture;         // Canny aperture size (default: 3)
+    
+    // CLAHE parameters for lighting normalization  
+    double clahe_clip_limit;        // CLAHE clip limit (default: 2.0)
+    int32_t clahe_tile_size;        // CLAHE tile grid size (default: 8)
+    
+    // Contour filtering parameters
+    double min_contour_area;        // Minimum contour area (default: 1000.0)
+    double min_solidity;            // Minimum solidity ratio (default: 0.5)
+    double max_aspect_ratio;        // Maximum aspect ratio (default: 10.0)
+    
+    // Polygon approximation (higher precision for CAD)
+    double polygon_epsilon_factor;  // Polygon approximation factor (default: 0.005)
+    
+    // Sub-pixel refinement
+    bool enable_subpixel_refinement; // Enable sub-pixel accuracy (default: true)
+    int32_t corner_win_size;        // Corner refinement window size (default: 5)
+    
+    // Validation parameters
+    bool validate_closed_contour;   // Validate contour closure (default: true)
+    double min_perimeter;           // Minimum contour perimeter (default: 100.0)
+    
+    // Tolerance/dilation for 3D printing cases
+    double dilation_amount_mm;      // Amount to dilate outline in millimeters (default: 0.0)
+    
+    // Debug visualization
+    bool enable_debug_output;       // Enable debug image output (default: false)
 } OutlineToolParams;
 
 // Point structure for contour data
