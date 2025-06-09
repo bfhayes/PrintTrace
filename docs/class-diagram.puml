@@ -1,0 +1,93 @@
+@startuml OutlineTool-ClassDiagram
+!theme plain
+title OutlineTool - Class Architecture
+
+package "OutlineTool Namespace" {
+    
+    class ImageProcessor {
+        + {static} loadImage(path: string) : Mat
+        + {static} convertToGrayscale(img: Mat) : Mat
+        + {static} thresholdImage(img: Mat, threshold: int) : Mat
+        + {static} findLargestContour(binaryImg: Mat) : vector<Point>
+        + {static} approximatePolygon(contour: vector<Point>, epsilon: double) : vector<Point>
+        + {static} warpImage(binaryImg: Mat, approx: vector<Point>, side: int, realWorldMM: double) : pair<Mat, double>
+        + {static} removeNoise(binaryImg: Mat, kernelSize: int, blurSize: int, threshold: int) : Mat
+        + {static} findMainContour(binaryImg: Mat) : vector<Point>
+        + {static} processImageToContour(inputPath: string, params: ProcessingParams) : vector<Point>
+        + {static} processImageToContour(inputPath: string) : vector<Point>
+    }
+    
+    class ProcessingParams {
+        + warpSize: int = 3240
+        + realWorldSizeMM: double = 162.0
+        + thresholdValue: int = 127
+        + noiseKernelSize: int = 21
+        + blurSize: int = 101
+        + polygonEpsilonFactor: double = 0.02
+    }
+    
+    class DXFWriter {
+        - m_dxfWriter: dxfRW&
+        - m_pixelsPerMM: double
+        - m_polylines: vector<DRW_LWPolyline>
+        --
+        + DXFWriter(dxfWriter: dxfRW&, pixelsPerMM: double)
+        + addContour(contour: vector<Point>) : void
+        + {static} saveContourAsDXF(contour: vector<Point>, pixelsPerMM: double, outputPath: string) : bool
+        + addLWPolyline(data: DRW_LWPolyline&) : void
+        + writeEntities() : void
+        + ... other DRW_Interface methods (no-ops)
+    }
+    
+    ImageProcessor +-- ProcessingParams : contains
+    
+}
+
+package "External Dependencies" {
+    interface DRW_Interface {
+        + addLWPolyline(data: DRW_LWPolyline&) : void
+        + writeEntities() : void
+        + ... many other virtual methods
+    }
+    
+    class dxfRW {
+        + write(interface: DRW_Interface*, version: Version, binary: bool) : bool
+        + writeLWPolyline(polyline: DRW_LWPolyline*) : bool
+    }
+    
+    class "OpenCV::Mat" as Mat {
+        + rows: int
+        + cols: int
+        + empty() : bool
+    }
+    
+    class "OpenCV::Point" as Point {
+        + x: int
+        + y: int
+    }
+}
+
+DXFWriter --|> DRW_Interface : implements
+DXFWriter --> dxfRW : uses
+ImageProcessor --> Mat : manipulates
+ImageProcessor --> Point : returns vectors of
+
+note right of ImageProcessor
+  All methods are static utility functions.
+  No instance state is maintained.
+  Pure functional approach to image processing.
+end note
+
+note right of DXFWriter
+  Implements the Bridge pattern to interface
+  with libdxfrw. Handles coordinate conversion
+  from pixel space to real-world millimeters.
+end note
+
+note right of ProcessingParams
+  Configuration object using the
+  Parameter Object pattern to avoid
+  long parameter lists in functions.
+end note
+
+@enduml

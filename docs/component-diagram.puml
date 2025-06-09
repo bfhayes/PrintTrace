@@ -1,0 +1,104 @@
+@startuml OutlineTool-ComponentDiagram
+!theme plain
+title OutlineTool - Component Architecture
+
+package "OutlineTool Application" {
+    
+    component "Command Line Interface" as CLI {
+        [Argument Parser]
+        [Input Validation]
+        [Error Handling]
+        [Usage Display]
+    }
+    
+    component "Image Processing Engine" as IPE {
+        [Image Loading]
+        [Grayscale Conversion]
+        [Binary Thresholding]
+        [Contour Detection]
+        [Polygon Approximation]
+        [Perspective Correction]
+        [Noise Reduction]
+        [Main Object Extraction]
+    }
+    
+    component "DXF Export System" as DXF {
+        [Coordinate Conversion]
+        [Polyline Creation]
+        [DXF Interface Bridge]
+        [File Writing]
+    }
+    
+    component "Configuration" as CONFIG {
+        [Processing Parameters]
+        [Default Values]
+        [Validation Rules]
+    }
+}
+
+package "External Libraries" {
+    component "OpenCV Library" as OPENCV {
+        [Image I/O]
+        [Image Processing]
+        [Computer Vision]
+        [Geometric Transforms]
+    }
+    
+    component "libdxfrw Library" as LIBDXF {
+        [DXF Reading]
+        [DXF Writing]
+        [CAD Format Support]
+    }
+}
+
+package "Operating System" as OS {
+    component "File System" as FS {
+        [File Operations]
+        [Directory Access]
+        [Path Resolution]
+    }
+}
+
+' Relationships
+CLI --> IPE : orchestrates
+IPE --> DXF : provides contour data
+CLI --> CONFIG : uses parameters
+IPE --> CONFIG : applies settings
+DXF --> CONFIG : uses scaling parameters
+
+IPE --> OPENCV : image operations
+DXF --> LIBDXF : DXF generation
+CLI --> FS : file validation
+DXF --> FS : file writing
+
+' Interface definitions
+interface "Image Data" as IImageData
+interface "Contour Data" as IContourData
+interface "DXF Data" as IDXFData
+
+CLI ..> IImageData : input
+IPE ..> IImageData : processes
+IPE ..> IContourData : produces
+DXF ..> IContourData : consumes
+DXF ..> IDXFData : produces
+FS ..> IDXFData : stores
+
+note right of IPE
+  Stateless design with pure functions.
+  Each processing step is independent
+  and can be tested in isolation.
+end note
+
+note right of DXF
+  Implements adapter pattern to
+  bridge between OpenCV Point
+  format and DXF polyline format.
+end note
+
+note bottom of CONFIG
+  Parameter Object pattern
+  encapsulates all processing
+  configuration in one place.
+end note
+
+@enduml

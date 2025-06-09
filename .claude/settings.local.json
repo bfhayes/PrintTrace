@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(make:*)",
+      "Bash(./build/OutlineTool)",
+      "Bash(nm:*)",
+      "Bash(cp:*)",
+      "Bash(export:*)",
+      "Bash(swift run:*)",
+      "Bash(swift:*)"
+    ],
+    "deny": []
+  }
+}

@@ -1,0 +1,4 @@
+module OutlineToolSwift {
+    header "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/OutlineToolSwift-Swift.h"
+    requires objc
+}

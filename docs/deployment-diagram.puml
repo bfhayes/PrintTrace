@@ -1,0 +1,130 @@
+@startuml OutlineTool-Deployment
+!theme plain
+title OutlineTool - Deployment Architecture
+
+node "Development Machine" {
+    artifact "Source Code" {
+        file "src/main.cpp"
+        file "src/ImageProcessor.cpp"
+        file "src/DXFWriter.cpp"
+        file "include/ImageProcessor.hpp"
+        file "include/DXFWriter.hpp"
+    }
+    
+    artifact "Build System" {
+        file "CMakeLists.txt"
+        file "Makefile"
+        file "install-deps.sh"
+    }
+    
+    artifact "Documentation" {
+        file "README.md"
+        file "CLAUDE.md"
+        folder "docs/" {
+            file "*.puml"
+        }
+    }
+}
+
+node "Build Environment" {
+    component "CMake Build System" as CMAKE
+    component "C++ Compiler (GCC/Clang)" as COMPILER
+    
+    package "Dependencies" {
+        component "OpenCV Library" as OPENCV_LIB
+        component "libdxfrw Library" as DXFRW_LIB
+    }
+}
+
+node "Runtime Environment" {
+    artifact "OutlineTool Executable" as EXECUTABLE
+    
+    package "System Libraries" {
+        component "OpenCV Runtime" as OPENCV_RT
+        component "libdxfrw Runtime" as DXFRW_RT
+        component "System C++ Runtime" as CPP_RT
+    }
+    
+    storage "Input Images" as INPUT_FILES {
+        file "photo1.jpg"
+        file "photo2.png"
+        file "scan.tiff"
+    }
+    
+    storage "Output DXF Files" as OUTPUT_FILES {
+        file "outline1.dxf"
+        file "outline2.dxf"
+        file "drawing.dxf"
+    }
+}
+
+node "CAD Software" {
+    component "AutoCAD" as AUTOCAD
+    component "LibreCAD" as LIBRECAD
+    component "FreeCAD" as FREECAD
+    component "Other CAD Tools" as OTHER_CAD
+}
+
+' Build relationships
+"Source Code" --> CMAKE : configure
+"Build System" --> CMAKE : settings
+CMAKE --> COMPILER : compile instructions
+COMPILER --> EXECUTABLE : link with
+OPENCV_LIB --> EXECUTABLE : static/dynamic link
+DXFRW_LIB --> EXECUTABLE : static/dynamic link
+
+' Runtime relationships
+EXECUTABLE --> OPENCV_RT : runtime dependency
+EXECUTABLE --> DXFRW_RT : runtime dependency
+EXECUTABLE --> CPP_RT : runtime dependency
+INPUT_FILES --> EXECUTABLE : processes
+EXECUTABLE --> OUTPUT_FILES : generates
+
+' Usage relationships
+OUTPUT_FILES --> AUTOCAD : import
+OUTPUT_FILES --> LIBRECAD : import
+OUTPUT_FILES --> FREECAD : import
+OUTPUT_FILES --> OTHER_CAD : import
+
+' Installation paths
+note right of OPENCV_LIB
+  Typical locations:
+  • /opt/homebrew/lib (macOS)
+  • /usr/local/lib (Linux)
+  • /usr/lib (System)
+end note
+
+note right of DXFRW_LIB
+  Usually built from source:
+  • /usr/local/lib/libdxfrw.a
+  • /opt/homebrew/lib/libdxfrw.a
+end note
+
+note bottom of EXECUTABLE
+  Single static binary with
+  minimal runtime dependencies.
+  Portable across systems with
+  compatible libraries.
+end note
+
+' Deployment scenarios
+package "Deployment Scenarios" {
+    cloud "CI/CD Pipeline" {
+        component "GitHub Actions" as CI
+        component "Build Matrix" as MATRIX
+        artifact "Release Binaries" as RELEASES
+    }
+    
+    cloud "Package Managers" {
+        component "Homebrew Formula" as BREW
+        component "APT Package" as APT
+        component "Docker Image" as DOCKER
+    }
+}
+
+EXECUTABLE --> RELEASES : automated build
+RELEASES --> BREW : distribution
+RELEASES --> APT : distribution
+RELEASES --> DOCKER : containerized
+
+@enduml

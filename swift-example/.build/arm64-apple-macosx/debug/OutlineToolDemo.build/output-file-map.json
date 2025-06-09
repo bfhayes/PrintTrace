@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/master.swiftdeps"
+  },
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolDemo/main.swift": {
+    "dependencies": "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/main.d",
+    "object": "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/main.swift.o",
+    "swiftmodule": "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/main.swiftdeps"
+  }
+}

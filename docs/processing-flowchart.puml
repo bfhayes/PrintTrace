@@ -1,0 +1,182 @@
+@startuml OutlineTool-ProcessingFlowchart
+!theme plain
+title OutlineTool - Image Processing Flowchart with Tweakable Parameters
+
+start
+
+:Load Image from File;
+note right
+  **Input Validation**
+  • Check file exists
+  • Validate image format
+  • Minimum size: 100x100 pixels
+end note
+
+if (Image loaded successfully?) then (yes)
+else (no)
+  :Display error message;
+  stop
+endif
+
+:Convert BGR to Grayscale;
+note right: **OpenCV: cvtColor()**
+
+:Apply Binary Threshold;
+note right
+  **🔧 TWEAKABLE PARAMETER**
+  **thresholdValue** = 127
+  • Range: 0-255
+  • Lower = more white pixels
+  • Higher = more black pixels
+end note
+
+:Find All Contours;
+note right
+  **OpenCV: findContours()**
+  • Mode: RETR_EXTERNAL
+  • Method: CHAIN_APPROX_SIMPLE
+end note
+
+if (Contours found?) then (yes)
+else (no)
+  :Display "No contours found";
+  stop
+endif
+
+:Select Largest Contour by Area;
+note right: **Document/Lightbox Boundary**
+
+:Approximate Contour to Polygon;
+note right
+  **🔧 TWEAKABLE PARAMETER**
+  **polygonEpsilonFactor** = 0.02
+  • Range: 0.001-0.1
+  • Lower = more detailed polygon
+  • Higher = simpler polygon
+  **Formula: epsilon = factor × perimeter**
+end note
+
+if (Polygon has 4 corners?) then (yes)
+else (no)
+  :Display "Expected 4 corners" error;
+  stop
+endif
+
+:Identify Corner Order;
+note right
+  **Corner Detection Algorithm**
+  • Top-left: min(x+y)
+  • Top-right: min(y-x)  
+  • Bottom-right: max(x+y)
+  • Bottom-left: max(y-x)
+end note
+
+:Calculate Perspective Transform;
+note right
+  **🔧 TWEAKABLE PARAMETERS**
+  **warpSize** = 3240 pixels
+  **realWorldSizeMM** = 162.0 mm
+  
+  **Pixels Per MM** = warpSize / realWorldSizeMM
+  **Default: 20 pixels/mm**
+end note
+
+:Apply Perspective Warp to Square;
+note right
+  **OpenCV: warpPerspective()**
+  • Maps 4 corners to square
+  • Corrects perspective distortion
+  • Normalizes image size
+end note
+
+:Invert Image (Object → White);
+note right: **Prepare for morphology**
+
+:Apply Morphological Opening;
+note right
+  **🔧 TWEAKABLE PARAMETER**
+  **noiseKernelSize** = 21
+  • Range: 3-51 (odd numbers)
+  • Smaller = less noise removal
+  • Larger = more aggressive cleaning
+  **Shape: Elliptical kernel**
+end note
+
+:Apply Morphological Closing;
+note right: **Same kernel as opening**
+
+:Dilate Image (4 iterations);
+note right
+  **Expand object boundaries**
+  • Makes contours more solid
+  • Fills small gaps
+end note
+
+:Apply Gaussian Blur;
+note right
+  **🔧 TWEAKABLE PARAMETER**
+  **blurSize** = 101
+  • Range: 3-201 (odd numbers)
+  • Smaller = less smoothing
+  • Larger = more smoothing
+  **Creates smooth boundaries**
+end note
+
+:Apply Final Binary Threshold;
+note right
+  **🔧 TWEAKABLE PARAMETER**
+  **thresholdValue** = 127
+  • Same as initial threshold
+  • Converts blurred image to binary
+end note
+
+:Find Object Contours;
+note right
+  **Second contour detection**
+  • On cleaned image
+  • Object should be main contour
+end note
+
+if (Object contours found?) then (yes)
+else (no)
+  :Display "No object found";
+  stop
+endif
+
+:Select Largest Object Contour;
+note right: **Main object identification**
+
+:Convert Pixels to Millimeters;
+note right
+  **Coordinate Transformation**
+  **For each point (x,y):**
+  • x_mm = x / pixelsPerMM
+  • y_mm = y / pixelsPerMM
+end note
+
+:Create DXF Polyline;
+note right
+  **DXF Properties**
+  • Layer: "Default"
+  • Color: 256 (by layer)
+  • Flags: 1 (closed)
+  • Elevation: 0.0
+  • Thickness: 0.0
+end note
+
+:Write DXF File;
+note right
+  **libdxfrw Library**
+  • Version: AC1015 (AutoCAD 2000)
+  • Binary: false (ASCII format)
+end note
+
+if (DXF write successful?) then (yes)
+  :Display success message;
+else (no)
+  :Display write error;
+endif
+
+stop
+
+@enduml

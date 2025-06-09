@@ -1,0 +1,176 @@
+@startuml OutlineTool-DesignPatterns
+!theme plain
+title OutlineTool - Design Patterns Used
+
+package "Static Utility Pattern" <<Frame>> {
+    class ImageProcessor {
+        + {static} loadImage()
+        + {static} convertToGrayscale()
+        + {static} thresholdImage()
+        + {static} findLargestContour()
+        + {static} approximatePolygon()
+        + {static} warpImage()
+        + {static} removeNoise()
+        + {static} findMainContour()
+        + {static} processImageToContour()
+    }
+    
+    note right of ImageProcessor
+        **Static Utility Pattern**
+        • All methods are static
+        • No instance state
+        • Pure functional approach
+        • Easy to test and reason about
+    end note
+}
+
+package "Parameter Object Pattern" <<Frame>> {
+    class ProcessingParams {
+        + warpSize: int = 3240
+        + realWorldSizeMM: double = 162.0
+        + thresholdValue: int = 127
+        + noiseKernelSize: int = 21
+        + blurSize: int = 101
+        + polygonEpsilonFactor: double = 0.02
+    }
+    
+    ImageProcessor --> ProcessingParams : uses
+    
+    note right of ProcessingParams
+        **Parameter Object Pattern**
+        • Encapsulates related parameters
+        • Reduces method parameter count
+        • Provides default values
+        • Makes API more maintainable
+    end note
+}
+
+package "Adapter Pattern" <<Frame>> {
+    interface DRW_Interface {
+        + addLWPolyline()
+        + writeEntities()
+        + {abstract} many other methods...
+    }
+    
+    class DXFWriter {
+        - m_dxfWriter: dxfRW&
+        - m_pixelsPerMM: double
+        - m_polylines: vector<DRW_LWPolyline>
+        --
+        + addContour(vector<Point>)
+        + addLWPolyline()
+        + writeEntities()
+    }
+    
+    DXFWriter --|> DRW_Interface
+    
+    note right of DXFWriter
+        **Adapter Pattern**
+        • Adapts OpenCV Point format
+          to DXF polyline format
+        • Bridges incompatible interfaces
+        • Handles coordinate conversion
+        • Isolates external library details
+    end note
+}
+
+package "Bridge Pattern" <<Frame>> {
+    class DXFWriter {
+        - m_dxfWriter: dxfRW&
+    }
+    
+    class dxfRW {
+        + write()
+        + writeLWPolyline()
+    }
+    
+    DXFWriter --> dxfRW : bridges to
+    
+    note right
+        **Bridge Pattern**
+        • Separates abstraction from implementation
+        • DXFWriter provides high-level interface
+        • dxfRW handles low-level DXF operations
+        • Allows implementation to vary independently
+    end note
+}
+
+package "Template Method Pattern" <<Frame>> {
+    class ImageProcessor {
+        + {static} processImageToContour()
+    }
+    
+    note right of ImageProcessor
+        **Template Method Pattern**
+        processImageToContour() defines the algorithm skeleton:
+        1. loadImage()
+        2. convertToGrayscale()
+        3. thresholdImage()
+        4. findLargestContour()
+        5. approximatePolygon()
+        6. warpImage()
+        7. removeNoise()
+        8. findMainContour()
+        
+        Each step is a separate method that could
+        be overridden if this were inheritance-based.
+    end note
+}
+
+package "Factory Method Pattern" <<Frame>> {
+    class DXFWriter {
+        + {static} saveContourAsDXF()
+    }
+    
+    note right of DXFWriter
+        **Factory Method Pattern**
+        saveContourAsDXF() is a static factory method:
+        • Creates dxfRW instance
+        • Creates DXFWriter instance
+        • Configures both appropriately
+        • Handles the complete creation process
+        • Encapsulates object creation complexity
+    end note
+}
+
+package "Command Pattern (Implicit)" <<Frame>> {
+    class "main()" as Main {
+        + parseArguments()
+        + validateInput()
+        + processImage()
+        + exportDXF()
+        + handleErrors()
+    }
+    
+    note right of Main
+        **Command Pattern (Implicit)**
+        • Each operation encapsulated as method
+        • Clear separation of concerns
+        • Easy to add new commands/operations
+        • Error handling centralized
+        • Undo could be added if needed
+    end note
+}
+
+package "Strategy Pattern (Potential)" <<Frame>> {
+    note as N1
+        **Strategy Pattern (Not Yet Implemented)**
+        
+        Future enhancement possibilities:
+        • Different noise reduction strategies
+        • Multiple perspective correction algorithms
+        • Various contour detection methods
+        • Different export formats (SVG, PDF, etc.)
+        
+        The current static utility design makes it
+        easy to evolve toward strategy pattern when
+        algorithmic variations are needed.
+    end note
+}
+
+' Pattern relationships
+ImageProcessor ..> Main : used by
+DXFWriter ..> Main : used by
+ProcessingParams ..> Main : configured by
+
+@enduml

@@ -1,0 +1,171 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "OutlineToolDemo-arm64-apple-macosx15.0-debug.exe": ["<OutlineToolDemo-arm64-apple-macosx15.0-debug.exe>"]
+  "OutlineToolDemo-arm64-apple-macosx15.0-debug.module": ["<OutlineToolDemo-arm64-apple-macosx15.0-debug.module>"]
+  "OutlineToolSwift-arm64-apple-macosx15.0-debug.module": ["<OutlineToolSwift-arm64-apple-macosx15.0-debug.module>"]
+  "OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.module": ["<OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.module>"]
+  "OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.test": ["<OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.test>"]
+  "OutlineToolSwiftTests-arm64-apple-macosx15.0-debug.module": ["<OutlineToolSwiftTests-arm64-apple-macosx15.0-debug.module>"]
+  "PackageStructure": ["<PackageStructure>"]
+  "main": ["<OutlineToolDemo-arm64-apple-macosx15.0-debug.exe>","<OutlineToolDemo-arm64-apple-macosx15.0-debug.module>","<OutlineToolSwift-arm64-apple-macosx15.0-debug.module>"]
+  "test": ["<OutlineToolDemo-arm64-apple-macosx15.0-debug.exe>","<OutlineToolDemo-arm64-apple-macosx15.0-debug.module>","<OutlineToolSwift-arm64-apple-macosx15.0-debug.module>","<OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.test>","<OutlineToolSwiftTests-arm64-apple-macosx15.0-debug.module>"]
+default: "main"
+nodes:
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/COutlineTool/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolDemo/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolSwift/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Tests/OutlineToolSwiftTests/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo":
+    is-mutated: true
+commands:
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo-entitlement.plist":
+    tool: write-auxiliary-file
+    inputs: ["<entitlement-plist>","<com.apple.security.get-task-allow>"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo-entitlement.plist"]
+    description: "Write auxiliary file /Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo-entitlement.plist"
+
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolDemo/main.swift"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/sources"]
+    description: "Write auxiliary file /Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/sources"
+
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/main.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/OutlineToolWrapper.swift.o"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.product/Objects.LinkFileList"
+
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolSwift/OutlineToolWrapper.swift"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/sources"]
+    description: "Write auxiliary file /Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/sources"
+
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.derived/runner.swift"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/sources"]
+    description: "Write auxiliary file /Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/sources"
+
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.derived/runner.swift":
+    tool: test-entry-point-tool
+    inputs: []
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.derived/runner.swift"]
+
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/OutlineToolWrapper.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/runner.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/OutlineToolSwiftTests.swift.o"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.product/Objects.LinkFileList"
+
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Tests/OutlineToolSwiftTests/OutlineToolSwiftTests.swift"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/sources"]
+    description: "Write auxiliary file /Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/sources"
+
+  "/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+
+  "<OutlineToolDemo-arm64-apple-macosx15.0-debug.exe>":
+    tool: phony
+    inputs: ["<OutlineToolDemo-arm64-apple-macosx15.0-debug.exe-CodeSigning>"]
+    outputs: ["<OutlineToolDemo-arm64-apple-macosx15.0-debug.exe>"]
+
+  "<OutlineToolDemo-arm64-apple-macosx15.0-debug.module>":
+    tool: phony
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/main.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolDemo.swiftmodule"]
+    outputs: ["<OutlineToolDemo-arm64-apple-macosx15.0-debug.module>"]
+
+  "<OutlineToolSwift-arm64-apple-macosx15.0-debug.module>":
+    tool: phony
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/OutlineToolWrapper.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwift.swiftmodule"]
+    outputs: ["<OutlineToolSwift-arm64-apple-macosx15.0-debug.module>"]
+
+  "<OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.module>":
+    tool: phony
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/runner.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftPackageTests.swiftmodule"]
+    outputs: ["<OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.module>"]
+
+  "<OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.test>":
+    tool: phony
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.xctest/Contents/MacOS/OutlineToolSwiftPackageTests"]
+    outputs: ["<OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.test>"]
+
+  "<OutlineToolSwiftTests-arm64-apple-macosx15.0-debug.module>":
+    tool: phony
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/OutlineToolSwiftTests.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftTests.swiftmodule"]
+    outputs: ["<OutlineToolSwiftTests-arm64-apple-macosx15.0-debug.module>"]
+
+  "C.OutlineToolDemo-arm64-apple-macosx15.0-debug.exe":
+    tool: shell
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/main.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/OutlineToolWrapper.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.product/Objects.LinkFileList"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo"]
+    description: "Linking ./.build/arm64-apple-macosx/debug/OutlineToolDemo"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-L","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug","-o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo","-module-name","OutlineToolDemo","-Xlinker","-no_warn_duplicate_libraries","-emit-executable","-Xlinker","-alias","-Xlinker","_OutlineToolDemo_main","-Xlinker","_main","-Xlinker","-rpath","-Xlinker","@loader_path","@/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.product/Objects.LinkFileList","-Xlinker","-rpath","-Xlinker","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.5/macosx","-target","arm64-apple-macosx10.15","-Xlinker","-add_ast_path","-Xlinker","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolDemo.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwift.swiftmodule","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g"]
+
+  "C.OutlineToolDemo-arm64-apple-macosx15.0-debug.exe-entitlements":
+    tool: shell
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo-entitlement.plist"]
+    outputs: ["<OutlineToolDemo-arm64-apple-macosx15.0-debug.exe-CodeSigning>"]
+    description: "Applying debug entitlements to ./.build/arm64-apple-macosx/debug/OutlineToolDemo"
+    args: ["codesign","--force","--sign","-","--entitlements","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo-entitlement.plist","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo"]
+
+  "C.OutlineToolDemo-arm64-apple-macosx15.0-debug.module":
+    tool: shell
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolDemo/main.swift","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwift.swiftmodule","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/sources"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/main.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolDemo.swiftmodule"]
+    description: "Compiling Swift Module 'OutlineToolDemo' (1 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","OutlineToolDemo","-emit-dependencies","-emit-module","-emit-module-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolDemo.swiftmodule","-output-file-map","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/output-file-map.json","-incremental","-c","@/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolDemo.build/sources","-I","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx10.15","-enable-batch-mode","-index-store-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j10","-DSWIFT_PACKAGE","-DDEBUG","-Xcc","-fmodule-map-file=/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/COutlineTool/module.modulemap","-module-cache-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","OutlineToolDemo_main","-parse-as-library","-swift-version","5","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-Xcc","-fPIC","-Xcc","-g"]
+
+  "C.OutlineToolSwift-arm64-apple-macosx15.0-debug.module":
+    tool: shell
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolSwift/OutlineToolWrapper.swift","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/sources"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/OutlineToolWrapper.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwift.swiftmodule"]
+    description: "Compiling Swift Module 'OutlineToolSwift' (1 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","OutlineToolSwift","-emit-dependencies","-emit-module","-emit-module-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwift.swiftmodule","-output-file-map","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/sources","-I","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx10.15","-enable-batch-mode","-index-store-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j10","-DSWIFT_PACKAGE","-DDEBUG","-Xcc","-fmodule-map-file=/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/COutlineTool/module.modulemap","-module-cache-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/OutlineToolSwift-Swift.h","-swift-version","5","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-Xcc","-fPIC","-Xcc","-g"]
+
+  "C.OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.module":
+    tool: shell
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.derived/runner.swift","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftTests.swiftmodule","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/sources"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/runner.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftPackageTests.swiftmodule"]
+    description: "Compiling Swift Module 'OutlineToolSwiftPackageTests' (1 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","OutlineToolSwiftPackageTests","-emit-dependencies","-emit-module","-emit-module-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftPackageTests.swiftmodule","-output-file-map","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/sources","-I","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx10.15","-enable-batch-mode","-index-store-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j10","-DSWIFT_PACKAGE","-DDEBUG","-Xcc","-fmodule-map-file=/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/COutlineTool/module.modulemap","-module-cache-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/OutlineToolSwiftPackageTests-Swift.h","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-Xcc","-fPIC","-Xcc","-g"]
+
+  "C.OutlineToolSwiftPackageTests-arm64-apple-macosx15.0-debug.test":
+    tool: shell
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwift.build/OutlineToolWrapper.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.build/runner.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/OutlineToolSwiftTests.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.product/Objects.LinkFileList"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.xctest/Contents/MacOS/OutlineToolSwiftPackageTests"]
+    description: "Linking ./.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.xctest/Contents/MacOS/OutlineToolSwiftPackageTests"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-L","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug","-o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.xctest/Contents/MacOS/OutlineToolSwiftPackageTests","-module-name","OutlineToolSwiftPackageTests","-Xlinker","-no_warn_duplicate_libraries","-Xlinker","-bundle","-Xlinker","-rpath","-Xlinker","@loader_path/../../../","@/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftPackageTests.product/Objects.LinkFileList","-target","arm64-apple-macosx14.0","-Xlinker","-add_ast_path","-Xlinker","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwift.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftPackageTests.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftTests.swiftmodule","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g"]
+
+  "C.OutlineToolSwiftTests-arm64-apple-macosx15.0-debug.module":
+    tool: shell
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Tests/OutlineToolSwiftTests/OutlineToolSwiftTests.swift","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwift.swiftmodule","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/sources"]
+    outputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/OutlineToolSwiftTests.swift.o","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftTests.swiftmodule"]
+    description: "Compiling Swift Module 'OutlineToolSwiftTests' (1 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","OutlineToolSwiftTests","-emit-dependencies","-emit-module","-emit-module-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules/OutlineToolSwiftTests.swiftmodule","-output-file-map","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/OutlineToolSwiftTests.build/sources","-I","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-enable-batch-mode","-index-store-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j10","-DSWIFT_PACKAGE","-DDEBUG","-Xcc","-fmodule-map-file=/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/COutlineTool/module.modulemap","-module-cache-path","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-swift-version","5","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-Xcc","-fPIC","-Xcc","-g"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/COutlineTool/","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolDemo/","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Sources/OutlineToolSwift/","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Tests/OutlineToolSwiftTests/","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Package.swift","/Users/bryanthayes/source.nosync/OutlineTool/swift-example/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+
