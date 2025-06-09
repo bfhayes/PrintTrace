@@ -41,6 +41,10 @@ public:
         // Tolerance/dilation for 3D printing cases
         double dilationAmountMM = 0.0;  // Amount to dilate outline in millimeters (0 = no dilation)
         
+        // Smoothing for 3D printing
+        bool enableSmoothing = false;    // Enable smoothing for easier 3D printing
+        double smoothingAmountMM = 0.2;  // Smoothing amount in millimeters (removes details smaller than this)
+        
         // Debug visualization
         bool enableDebugOutput = false;
         std::string debugOutputPath = "./debug/";
@@ -73,6 +77,9 @@ public:
                                                   const ProcessingParams& params);
     static std::vector<cv::Point> dilateContour(const std::vector<cv::Point>& contour, 
                                                 double dilationMM, double pixelsPerMM,
+                                                const ProcessingParams& params);
+    static std::vector<cv::Point> smoothContour(const std::vector<cv::Point>& contour,
+                                                double smoothingMM, double pixelsPerMM,
                                                 const ProcessingParams& params);
     static bool validateContour(const std::vector<cv::Point>& contour, const ProcessingParams& params);
     

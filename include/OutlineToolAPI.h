@@ -61,6 +61,10 @@ typedef struct {
     // Tolerance/dilation for 3D printing cases
     double dilation_amount_mm;      // Amount to dilate outline in millimeters (default: 0.0)
     
+    // Smoothing for 3D printing
+    bool enable_smoothing;          // Enable smoothing for easier 3D printing (default: false)
+    double smoothing_amount_mm;     // Smoothing amount in millimeters (default: 0.2)
+    
     // Debug visualization
     bool enable_debug_output;       // Enable debug image output (default: false)
 } OutlineToolParams;

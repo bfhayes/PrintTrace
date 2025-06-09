@@ -40,6 +40,9 @@ namespace {
             
             cpp_params.dilationAmountMM = params->dilation_amount_mm;
             
+            cpp_params.enableSmoothing = params->enable_smoothing;
+            cpp_params.smoothingAmountMM = params->smoothing_amount_mm;
+            
             cpp_params.enableDebugOutput = params->enable_debug_output;
         }
         return cpp_params;
@@ -128,6 +131,10 @@ void outline_tool_get_default_params(OutlineToolParams* params) {
     // Tolerance/dilation settings
     params->dilation_amount_mm = 0.0;
     
+    // Smoothing settings
+    params->enable_smoothing = false;
+    params->smoothing_amount_mm = 0.2;
+    
     // Debug settings
     params->enable_debug_output = false;
 }
@@ -194,6 +201,11 @@ OutlineToolResult outline_tool_validate_params(const OutlineToolParams* params) 
     
     // Dilation parameters
     if (params->dilation_amount_mm < 0.0 || params->dilation_amount_mm > 50.0) {
+        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Smoothing parameters
+    if (params->smoothing_amount_mm < 0.0 || params->smoothing_amount_mm > 10.0) {
         return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
     }
     

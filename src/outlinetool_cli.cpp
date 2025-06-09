@@ -13,6 +13,8 @@ struct Arguments {
     bool verbose = false;
     bool debug = false;
     double dilationMM = 0.0;
+    bool enableSmoothing = false;
+    double smoothingMM = 0.2;
 };
 
 Arguments parseArguments(int argc, char* argv[]) {
@@ -34,6 +36,11 @@ Arguments parseArguments(int argc, char* argv[]) {
             args.debug = true;
         } else if ((arg == "-t" || arg == "--tolerance") && (i + 1 < argc)) {
             args.dilationMM = stod(argv[++i]);
+        } else if (arg == "-s" || arg == "--smooth") {
+            args.enableSmoothing = true;
+        } else if ((arg == "--smooth-amount") && (i + 1 < argc)) {
+            args.smoothingMM = stod(argv[++i]);
+            args.enableSmoothing = true; // Auto-enable when amount is specified
         } else if (arg == "--help" || arg == "-h") {
             return args; // Will trigger usage display
         }
@@ -69,6 +76,8 @@ void printUsage(const char* progName) {
          << "Optional:\n"
          << "  -o, --output  Output DXF file path (auto-generated if not specified)\n"
          << "  -t, --tolerance <mm>  Add tolerance/clearance in millimeters for 3D printing (default: 0.0)\n"
+         << "  -s, --smooth  Enable smoothing to remove small details for easier 3D printing\n"
+         << "  --smooth-amount <mm>  Smoothing amount in millimeters (default: 0.2, enables smoothing)\n"
          << "  -v, --verbose Enable verbose output\n"
          << "  -d, --debug   Enable debug visualization (saves step-by-step images)\n"
          << "  -h, --help    Show this help message\n"
@@ -77,6 +86,8 @@ void printUsage(const char* progName) {
          << "  " << progName << " -i photo.jpg\n"
          << "  " << progName << " -i photo.jpg -o drawing.dxf\n"
          << "  " << progName << " -i photo.jpg -t 0.5  # Add 0.5mm tolerance for 3D printing\n"
+         << "  " << progName << " -i photo.jpg -s      # Enable smoothing for easier printing\n"
+         << "  " << progName << " -i photo.jpg -s -t 1.0  # Smooth + 1mm tolerance\n"
          << "  " << progName << " -i photo.jpg -v\n"
          << "  " << progName << " -i photo.jpg -d  # Saves debug images to ./debug/\n"
          << endl;
@@ -132,6 +143,13 @@ int main(int argc, char* argv[]) {
         params.dilation_amount_mm = args.dilationMM;
         cout << "[INFO] 3D printing tolerance enabled: " << args.dilationMM << "mm" << endl;
     }
+    
+    // Set smoothing for 3D printing if requested
+    if (args.enableSmoothing) {
+        params.enable_smoothing = true;
+        params.smoothing_amount_mm = args.smoothingMM;
+        cout << "[INFO] 3D printing smoothing enabled: " << args.smoothingMM << "mm" << endl;
+    }
 
     // Validate parameters
     OutlineToolResult validation_result = outline_tool_validate_params(&params);
@@ -151,6 +169,11 @@ int main(int argc, char* argv[]) {
         cout << "  Polygon epsilon: " << params.polygon_epsilon_factor << endl;
         cout << "  Sub-pixel refinement: " << (params.enable_subpixel_refinement ? "enabled" : "disabled") << endl;
         cout << "  3D printing tolerance: " << params.dilation_amount_mm << "mm" << endl;
+        cout << "  3D printing smoothing: " << (params.enable_smoothing ? "enabled" : "disabled");
+        if (params.enable_smoothing) {
+            cout << " (" << params.smoothing_amount_mm << "mm)";
+        }
+        cout << endl;
         
         double estimated_time = outline_tool_estimate_processing_time(args.inputPath.c_str());
         if (estimated_time > 0) {

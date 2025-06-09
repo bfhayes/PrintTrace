@@ -370,6 +370,93 @@ vector<Point> ImageProcessor::dilateContour(const vector<Point>& contour,
     return finalContour;
 }
 
+vector<Point> ImageProcessor::smoothContour(const vector<Point>& contour,
+                                           double smoothingMM, double pixelsPerMM,
+                                           const ProcessingParams& params) {
+    if (smoothingMM <= 0.0 || !params.enableSmoothing) {
+        cout << "[INFO] No smoothing requested, returning original contour" << endl;
+        return contour;
+    }
+    
+    cout << "[INFO] Smoothing contour by " << smoothingMM << "mm for easier 3D printing" << endl;
+    
+    // Convert smoothing from mm to pixels
+    double smoothingPixels = smoothingMM * pixelsPerMM;
+    cout << "[INFO] Smoothing in pixels: " << smoothingPixels << endl;
+    
+    // Create a mask from the contour
+    Rect boundingRect = cv::boundingRect(contour);
+    
+    // Add padding around bounding rect for morphological operations
+    int padding = static_cast<int>(smoothingPixels * 3);
+    Size imageSize(boundingRect.width + 2 * padding, boundingRect.height + 2 * padding);
+    Point offset(-boundingRect.x + padding, -boundingRect.y + padding);
+    
+    // Create binary mask
+    Mat mask = Mat::zeros(imageSize, CV_8UC1);
+    
+    // Adjust contour points for the mask coordinate system
+    vector<Point> adjustedContour;
+    for (const Point& pt : contour) {
+        adjustedContour.push_back(Point(pt.x + offset.x, pt.y + offset.y));
+    }
+    
+    // Fill the contour in the mask
+    vector<vector<Point>> contourVec = {adjustedContour};
+    fillPoly(mask, contourVec, Scalar(255));
+    
+    saveDebugImage(mask, "10a_smooth_mask.jpg", params);
+    
+    // Apply morphological operations for smoothing
+    int kernelSize = static_cast<int>(smoothingPixels * 2 + 1);
+    if (kernelSize < 3) kernelSize = 3;
+    
+    Mat kernel = getStructuringElement(MORPH_ELLIPSE, Size(kernelSize, kernelSize));
+    Mat smoothed;
+    
+    // Apply closing (dilation followed by erosion) to smooth out small indentations
+    morphologyEx(mask, smoothed, MORPH_CLOSE, kernel);
+    
+    // Apply opening (erosion followed by dilation) to smooth out small protrusions
+    morphologyEx(smoothed, smoothed, MORPH_OPEN, kernel);
+    
+    saveDebugImage(smoothed, "10b_smoothed_mask.jpg", params);
+    
+    // Extract the smoothed contour
+    vector<vector<Point>> smoothedContours;
+    findContours(smoothed, smoothedContours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    
+    if (smoothedContours.empty()) {
+        cout << "[WARN] No contours found after smoothing, returning original" << endl;
+        return contour;
+    }
+    
+    // Find the largest contour (should be our smoothed shape)
+    double maxArea = 0;
+    int bestIdx = -1;
+    for (size_t i = 0; i < smoothedContours.size(); i++) {
+        double area = contourArea(smoothedContours[i]);
+        if (area > maxArea) {
+            maxArea = area;
+            bestIdx = static_cast<int>(i);
+        }
+    }
+    
+    if (bestIdx < 0) {
+        cout << "[WARN] No valid smoothed contour found, returning original" << endl;
+        return contour;
+    }
+    
+    // Convert back to original coordinate system
+    vector<Point> finalContour;
+    for (const Point& pt : smoothedContours[bestIdx]) {
+        finalContour.push_back(Point(pt.x - offset.x, pt.y - offset.y));
+    }
+    
+    cout << "[INFO] Smoothing complete. Original: " << contour.size() << " points, Smoothed: " << finalContour.size() << " points" << endl;
+    return finalContour;
+}
+
 bool ImageProcessor::validateContour(const vector<Point>& contour, const ProcessingParams& params) {
     cout << "[INFO] Validating contour for CAD suitability" << endl;
     
@@ -736,13 +823,20 @@ vector<Point> ImageProcessor::processImageToContour(const string& inputPath, con
     vector<Point> objectContour = findObjectContour(warped, params);
     saveDebugImageWithCleanContour(warped, objectContour, "08_object_contour.jpg", params);
     
-    // Step 7: Apply dilation for 3D printing tolerance if requested
-    if (params.dilationAmountMM > 0.0) {
-        objectContour = dilateContour(objectContour, params.dilationAmountMM, pixelsPerMM, params);
-        saveDebugImageWithCleanContour(warped, objectContour, "09_dilated_contour.jpg", params);
+    // Step 7: Apply smoothing for easier 3D printing if requested
+    if (params.enableSmoothing) {
+        objectContour = smoothContour(objectContour, params.smoothingAmountMM, pixelsPerMM, params);
+        saveDebugImageWithCleanContour(warped, objectContour, "09_smoothed_contour.jpg", params);
     }
     
-    // Step 8: Validate the contour for CAD suitability
+    // Step 8: Apply dilation for 3D printing tolerance if requested
+    if (params.dilationAmountMM > 0.0) {
+        objectContour = dilateContour(objectContour, params.dilationAmountMM, pixelsPerMM, params);
+        string filename = params.enableSmoothing ? "10_dilated_contour.jpg" : "09_dilated_contour.jpg";
+        saveDebugImageWithCleanContour(warped, objectContour, filename, params);
+    }
+    
+    // Step 9: Validate the contour for CAD suitability
     if (!validateContour(objectContour, params)) {
         throw runtime_error("Generated contour failed validation checks");
     }
