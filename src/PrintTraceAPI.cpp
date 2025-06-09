@@ -26,6 +26,16 @@ namespace {
             cpp_params.claheClipLimit = params->clahe_clip_limit;
             cpp_params.claheTileSize = params->clahe_tile_size;
             
+            cpp_params.useAdaptiveThreshold = params->use_adaptive_threshold;
+            cpp_params.manualThreshold = params->manual_threshold;
+            cpp_params.thresholdOffset = params->threshold_offset;
+            
+            cpp_params.disableMorphology = params->disable_morphology;
+            cpp_params.morphKernelSize = params->morph_kernel_size;
+            
+            cpp_params.mergeNearbyContours = params->merge_nearby_contours;
+            cpp_params.contourMergeDistanceMM = params->contour_merge_distance_mm;
+            
             cpp_params.minContourArea = params->min_contour_area;
             cpp_params.minSolidity = params->min_solidity;
             cpp_params.maxAspectRatio = params->max_aspect_ratio;
@@ -65,10 +75,50 @@ namespace {
         }
     }
     
+    // Convert OpenCV Mat to PrintTraceImageData
+    void convertMatToImageData(const cv::Mat& mat, PrintTraceImageData* image_data) {
+        // Ensure we have a valid image
+        if (mat.empty()) {
+            image_data->data = nullptr;
+            image_data->width = 0;
+            image_data->height = 0;
+            image_data->channels = 0;
+            image_data->bytes_per_row = 0;
+            return;
+        }
+        
+        cv::Mat converted;
+        
+        // Convert to RGBA8888 format for Swift compatibility
+        if (mat.channels() == 1) {
+            // Grayscale to RGBA
+            cv::cvtColor(mat, converted, cv::COLOR_GRAY2RGBA);
+        } else if (mat.channels() == 3) {
+            // BGR to RGBA
+            cv::cvtColor(mat, converted, cv::COLOR_BGR2RGBA);
+        } else if (mat.channels() == 4) {
+            // Already RGBA, just copy
+            converted = mat.clone();
+        } else {
+            throw std::runtime_error("Unsupported image format");
+        }
+        
+        // Fill image data structure
+        image_data->width = converted.cols;
+        image_data->height = converted.rows;
+        image_data->channels = 4; // Always RGBA
+        image_data->bytes_per_row = converted.step;
+        
+        // Allocate and copy data
+        size_t data_size = converted.total() * converted.elemSize();
+        image_data->data = static_cast<uint8_t*>(malloc(data_size));
+        std::memcpy(image_data->data, converted.data, data_size);
+    }
+    
     // Convert C++ exception to error code
-    PrintTraceResult handleException(const std::exception& e, PrintTraceErrorCallback error_callback) {
+    PrintTraceResult handleException(const std::exception& e, PrintTraceErrorCallback error_callback, void* user_data) {
         if (error_callback) {
-            error_callback(PRINT_TRACE_ERROR_PROCESSING_FAILED, e.what());
+            error_callback(PRINT_TRACE_ERROR_PROCESSING_FAILED, e.what(), user_data);
         }
         
         std::string what = e.what();
@@ -88,9 +138,9 @@ namespace {
     }
     
     // Progress reporting helper
-    void reportProgress(PrintTraceProgressCallback callback, double progress, const char* stage) {
+    void reportProgress(PrintTraceProgressCallback callback, double progress, const char* stage, void* user_data) {
         if (callback) {
-            callback(progress, stage);
+            callback(progress, stage, user_data);
         }
     }
 }
@@ -111,6 +161,19 @@ void print_trace_get_default_params(PrintTraceParams* params) {
     // CLAHE lighting normalization
     params->clahe_clip_limit = 2.0;
     params->clahe_tile_size = 8;
+    
+    // Object detection parameters
+    params->use_adaptive_threshold = false;
+    params->manual_threshold = 0.0;        // 0 = automatic
+    params->threshold_offset = 0.0;        // No offset from auto threshold
+    
+    // Morphological processing parameters
+    params->disable_morphology = false;    // Enable morphological cleaning by default
+    params->morph_kernel_size = 5;         // Moderate kernel size
+    
+    // Multi-contour detection parameters
+    params->merge_nearby_contours = true;  // Enable contour merging by default
+    params->contour_merge_distance_mm = 5.0; // 5mm merge distance
     
     // Enhanced contour filtering (more permissive for real images)
     params->min_contour_area = 500.0;
@@ -139,73 +202,180 @@ void print_trace_get_default_params(PrintTraceParams* params) {
     params->enable_debug_output = false;
 }
 
+void print_trace_get_param_ranges(PrintTraceParamRanges* ranges) {
+    if (!ranges) return;
+    
+    // Image processing parameter ranges
+    ranges->warp_size_min = 500;
+    ranges->warp_size_max = 8000;
+    ranges->real_world_size_mm_min = 10.0;
+    ranges->real_world_size_mm_max = 500.0;
+    
+    // Edge detection ranges
+    ranges->canny_lower_min = 10.0;
+    ranges->canny_lower_max = 200.0;
+    ranges->canny_upper_min = 50.0;
+    ranges->canny_upper_max = 400.0;
+    ranges->canny_aperture_values[0] = 3;
+    ranges->canny_aperture_values[1] = 5;
+    ranges->canny_aperture_values[2] = 7;
+    
+    // CLAHE ranges
+    ranges->clahe_clip_limit_min = 0.5;
+    ranges->clahe_clip_limit_max = 8.0;
+    ranges->clahe_tile_size_min = 4;
+    ranges->clahe_tile_size_max = 16;
+    
+    // Object detection ranges
+    ranges->manual_threshold_min = 0.0;   // 0 = auto
+    ranges->manual_threshold_max = 255.0;
+    ranges->threshold_offset_min = -50.0;
+    ranges->threshold_offset_max = 50.0;
+    ranges->morph_kernel_size_min = 3;
+    ranges->morph_kernel_size_max = 15;
+    ranges->contour_merge_distance_mm_min = 1.0;
+    ranges->contour_merge_distance_mm_max = 20.0;
+    
+    // Contour filtering ranges
+    ranges->min_contour_area_min = 100.0;
+    ranges->min_contour_area_max = 10000.0;
+    ranges->min_solidity_min = 0.1;
+    ranges->min_solidity_max = 1.0;
+    ranges->max_aspect_ratio_min = 2.0;
+    ranges->max_aspect_ratio_max = 30.0;
+    
+    // Polygon approximation ranges
+    ranges->polygon_epsilon_factor_min = 0.001;
+    ranges->polygon_epsilon_factor_max = 0.02;
+    
+    // Sub-pixel refinement ranges
+    ranges->corner_win_size_min = 3;
+    ranges->corner_win_size_max = 15;
+    
+    // Validation ranges
+    ranges->min_perimeter_min = 50.0;
+    ranges->min_perimeter_max = 2000.0;
+    
+    // 3D printing ranges
+    ranges->dilation_amount_mm_min = 0.0;
+    ranges->dilation_amount_mm_max = 10.0;
+    ranges->smoothing_amount_mm_min = 0.1;
+    ranges->smoothing_amount_mm_max = 2.0;
+}
+
 PrintTraceResult print_trace_validate_params(const PrintTraceParams* params) {
     if (!params) return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     
+    // Get ranges for validation
+    PrintTraceParamRanges ranges;
+    print_trace_get_param_ranges(&ranges);
+    
     // Basic parameters
-    if (params->warp_size <= 0 || params->warp_size > 10000) {
+    if (params->warp_size < ranges.warp_size_min || params->warp_size > ranges.warp_size_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->real_world_size_mm <= 0.0 || params->real_world_size_mm > 1000.0) {
+    if (params->real_world_size_mm < ranges.real_world_size_mm_min || 
+        params->real_world_size_mm > ranges.real_world_size_mm_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Canny edge detection parameters
-    if (params->canny_lower < 0.0 || params->canny_lower > 500.0 ||
-        params->canny_upper < 0.0 || params->canny_upper > 500.0 ||
+    if (params->canny_lower < ranges.canny_lower_min || params->canny_lower > ranges.canny_lower_max ||
+        params->canny_upper < ranges.canny_upper_min || params->canny_upper > ranges.canny_upper_max ||
         params->canny_lower >= params->canny_upper) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->canny_aperture < 3 || params->canny_aperture > 7 || params->canny_aperture % 2 == 0) {
+    // Validate canny_aperture is one of the allowed values
+    bool valid_aperture = false;
+    for (int i = 0; i < 3; i++) {
+        if (params->canny_aperture == ranges.canny_aperture_values[i]) {
+            valid_aperture = true;
+            break;
+        }
+    }
+    if (!valid_aperture) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // CLAHE parameters
-    if (params->clahe_clip_limit < 0.1 || params->clahe_clip_limit > 10.0) {
+    if (params->clahe_clip_limit < ranges.clahe_clip_limit_min || 
+        params->clahe_clip_limit > ranges.clahe_clip_limit_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->clahe_tile_size < 2 || params->clahe_tile_size > 32) {
+    if (params->clahe_tile_size < ranges.clahe_tile_size_min || 
+        params->clahe_tile_size > ranges.clahe_tile_size_max) {
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Object detection parameters
+    if (params->manual_threshold < ranges.manual_threshold_min || 
+        params->manual_threshold > ranges.manual_threshold_max) {
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
+    }
+    
+    if (params->threshold_offset < ranges.threshold_offset_min || 
+        params->threshold_offset > ranges.threshold_offset_max) {
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Morphological processing parameters
+    if (params->morph_kernel_size < ranges.morph_kernel_size_min || 
+        params->morph_kernel_size > ranges.morph_kernel_size_max) {
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
+    }
+    
+    // Multi-contour detection parameters
+    if (params->contour_merge_distance_mm < ranges.contour_merge_distance_mm_min || 
+        params->contour_merge_distance_mm > ranges.contour_merge_distance_mm_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Contour filtering parameters
-    if (params->min_contour_area < 10.0 || params->min_contour_area > 1000000.0) {
+    if (params->min_contour_area < ranges.min_contour_area_min || 
+        params->min_contour_area > ranges.min_contour_area_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->min_solidity < 0.1 || params->min_solidity > 1.0) {
+    if (params->min_solidity < ranges.min_solidity_min || 
+        params->min_solidity > ranges.min_solidity_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->max_aspect_ratio < 1.0 || params->max_aspect_ratio > 50.0) {
+    if (params->max_aspect_ratio < ranges.max_aspect_ratio_min || 
+        params->max_aspect_ratio > ranges.max_aspect_ratio_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Polygon approximation
-    if (params->polygon_epsilon_factor < 0.0001 || params->polygon_epsilon_factor > 0.1) {
+    if (params->polygon_epsilon_factor < ranges.polygon_epsilon_factor_min || 
+        params->polygon_epsilon_factor > ranges.polygon_epsilon_factor_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Sub-pixel refinement
-    if (params->corner_win_size < 3 || params->corner_win_size > 15) {
+    if (params->corner_win_size < ranges.corner_win_size_min || 
+        params->corner_win_size > ranges.corner_win_size_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Validation parameters
-    if (params->min_perimeter < 10.0 || params->min_perimeter > 10000.0) {
+    if (params->min_perimeter < ranges.min_perimeter_min || 
+        params->min_perimeter > ranges.min_perimeter_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Dilation parameters
-    if (params->dilation_amount_mm < 0.0 || params->dilation_amount_mm > 50.0) {
+    if (params->dilation_amount_mm < ranges.dilation_amount_mm_min || 
+        params->dilation_amount_mm > ranges.dilation_amount_mm_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Smoothing parameters
-    if (params->smoothing_amount_mm < 0.0 || params->smoothing_amount_mm > 10.0) {
+    if (params->smoothing_amount_mm < ranges.smoothing_amount_mm_min || 
+        params->smoothing_amount_mm > ranges.smoothing_amount_mm_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
@@ -217,25 +387,68 @@ PrintTraceResult print_trace_process_image_to_contour(
     const PrintTraceParams* params,
     PrintTraceContour* contour,
     PrintTraceProgressCallback progress_callback,
-    PrintTraceErrorCallback error_callback
+    PrintTraceErrorCallback error_callback,
+    void* user_data
 ) {
-    if (!input_path || !contour) {
+    // Simply delegate to print_trace_process_to_stage with FINAL stage
+    // This eliminates code duplication and ensures consistency
+    
+    PrintTraceImageData dummy_image = {nullptr, 0, 0, 0, 0};
+    
+    PrintTraceResult result = print_trace_process_to_stage(
+        input_path,
+        params,
+        PRINT_TRACE_STAGE_FINAL,
+        &dummy_image,
+        contour,
+        progress_callback,
+        error_callback,
+        user_data
+    );
+    
+    // Free the image data we don't need for this function
+    if (dummy_image.data) {
+        free(dummy_image.data);
+    }
+    
+    return result;
+}
+
+PrintTraceResult print_trace_process_to_stage(
+    const char* input_path,
+    const PrintTraceParams* params,
+    PrintTraceProcessingStage target_stage,
+    PrintTraceImageData* result_image,
+    PrintTraceContour* contour,
+    PrintTraceProgressCallback progress_callback,
+    PrintTraceErrorCallback error_callback,
+    void* user_data
+) {
+    if (!input_path || !result_image) {
         if (error_callback) {
-            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid input parameters");
+            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid input parameters", user_data);
         }
         return PRINT_TRACE_ERROR_INVALID_INPUT;
     }
     
-    // Initialize contour
-    contour->points = nullptr;
-    contour->point_count = 0;
-    contour->pixels_per_mm = 0.0;
+    // Initialize outputs
+    result_image->data = nullptr;
+    result_image->width = 0;
+    result_image->height = 0;
+    result_image->channels = 0;
+    result_image->bytes_per_row = 0;
+    
+    if (contour) {
+        contour->points = nullptr;
+        contour->point_count = 0;
+        contour->pixels_per_mm = 0.0;
+    }
     
     // Check file exists
     std::ifstream file(input_path);
     if (!file.good()) {
         if (error_callback) {
-            error_callback(PRINT_TRACE_ERROR_FILE_NOT_FOUND, "Input file not found or not readable");
+            error_callback(PRINT_TRACE_ERROR_FILE_NOT_FOUND, "Input file not found or not readable", user_data);
         }
         return PRINT_TRACE_ERROR_FILE_NOT_FOUND;
     }
@@ -250,49 +463,56 @@ PrintTraceResult print_trace_process_image_to_contour(
     PrintTraceResult validation_result = print_trace_validate_params(params);
     if (validation_result != PRINT_TRACE_SUCCESS) {
         if (error_callback) {
-            error_callback(validation_result, "Invalid processing parameters");
+            error_callback(validation_result, "Invalid processing parameters", user_data);
         }
         return validation_result;
     }
     
     try {
-        reportProgress(progress_callback, 0.0, "Starting CAD-optimized image processing");
+        std::string stage_name = print_trace_get_processing_stage_name(target_stage);
+        reportProgress(progress_callback, 0.0, ("Processing to stage: " + stage_name).c_str(), user_data);
         
         // Convert parameters
         ImageProcessor::ProcessingParams cpp_params = convertParams(params);
-        double pixels_per_mm = static_cast<double>(cpp_params.warpSize) / cpp_params.realWorldSizeMM;
         
-        reportProgress(progress_callback, 0.1, "Loading and processing image");
+        // Process to target stage
+        auto [result_mat, result_contour] = ImageProcessor::processImageToStage(
+            input_path, cpp_params, static_cast<int>(target_stage)
+        );
         
-        // Use the new improved pipeline
-        std::vector<cv::Point> objectContour = ImageProcessor::processImageToContour(input_path, cpp_params);
+        reportProgress(progress_callback, 0.8, "Converting result data", user_data);
         
-        reportProgress(progress_callback, 0.9, "Converting contour data");
+        // Convert result image
+        convertMatToImageData(result_mat, result_image);
         
-        // Convert contour to C format
-        convertContour(objectContour, pixels_per_mm, contour);
+        // Convert contour if available and requested
+        if (contour && !result_contour.empty()) {
+            double pixels_per_mm = static_cast<double>(cpp_params.warpSize) / cpp_params.realWorldSizeMM;
+            convertContour(result_contour, pixels_per_mm, contour);
+        }
         
-        reportProgress(progress_callback, 1.0, "CAD-optimized processing complete");
+        reportProgress(progress_callback, 1.0, ("Processing to " + stage_name + " complete").c_str(), user_data);
         
         return PRINT_TRACE_SUCCESS;
         
     } catch (const std::invalid_argument& e) {
-        return handleException(e, error_callback);
+        return handleException(e, error_callback, user_data);
     } catch (const std::runtime_error& e) {
-        return handleException(e, error_callback);
+        return handleException(e, error_callback, user_data);
     } catch (const std::exception& e) {
-        return handleException(e, error_callback);
+        return handleException(e, error_callback, user_data);
     }
 }
 
 PrintTraceResult print_trace_save_contour_to_dxf(
     const PrintTraceContour* contour,
     const char* output_path,
-    PrintTraceErrorCallback error_callback
+    PrintTraceErrorCallback error_callback,
+    void* user_data
 ) {
     if (!contour || !output_path || !contour->points || contour->point_count <= 0) {
         if (error_callback) {
-            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid contour or output path");
+            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid contour or output path", user_data);
         }
         return PRINT_TRACE_ERROR_INVALID_INPUT;
     }
@@ -314,7 +534,7 @@ PrintTraceResult print_trace_save_contour_to_dxf(
         
         if (!success) {
             if (error_callback) {
-                error_callback(PRINT_TRACE_ERROR_DXF_WRITE_FAILED, "Failed to write DXF file");
+                error_callback(PRINT_TRACE_ERROR_DXF_WRITE_FAILED, "Failed to write DXF file", user_data);
             }
             return PRINT_TRACE_ERROR_DXF_WRITE_FAILED;
         }
@@ -322,7 +542,7 @@ PrintTraceResult print_trace_save_contour_to_dxf(
         return PRINT_TRACE_SUCCESS;
         
     } catch (const std::exception& e) {
-        return handleException(e, error_callback);
+        return handleException(e, error_callback, user_data);
     }
 }
 
@@ -331,11 +551,12 @@ PrintTraceResult print_trace_process_image_to_dxf(
     const char* output_path,
     const PrintTraceParams* params,
     PrintTraceProgressCallback progress_callback,
-    PrintTraceErrorCallback error_callback
+    PrintTraceErrorCallback error_callback,
+    void* user_data
 ) {
     if (!input_path || !output_path) {
         if (error_callback) {
-            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid input or output path");
+            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid input or output path", user_data);
         }
         return PRINT_TRACE_ERROR_INVALID_INPUT;
     }
@@ -344,7 +565,7 @@ PrintTraceResult print_trace_process_image_to_dxf(
     
     // Process image to contour
     PrintTraceResult result = print_trace_process_image_to_contour(
-        input_path, params, &contour, progress_callback, error_callback
+        input_path, params, &contour, progress_callback, error_callback, user_data
     );
     
     if (result != PRINT_TRACE_SUCCESS) {
@@ -352,7 +573,7 @@ PrintTraceResult print_trace_process_image_to_dxf(
     }
     
     // Save contour to DXF
-    result = print_trace_save_contour_to_dxf(&contour, output_path, error_callback);
+    result = print_trace_save_contour_to_dxf(&contour, output_path, error_callback, user_data);
     
     // Clean up
     print_trace_free_contour(&contour);
@@ -366,6 +587,17 @@ void print_trace_free_contour(PrintTraceContour* contour) {
         contour->points = nullptr;
         contour->point_count = 0;
         contour->pixels_per_mm = 0.0;
+    }
+}
+
+void print_trace_free_image_data(PrintTraceImageData* image_data) {
+    if (image_data && image_data->data) {
+        free(image_data->data);
+        image_data->data = nullptr;
+        image_data->width = 0;
+        image_data->height = 0;
+        image_data->channels = 0;
+        image_data->bytes_per_row = 0;
     }
 }
 
@@ -417,5 +649,42 @@ double print_trace_estimate_processing_time(const char* image_path) {
         
     } catch (...) {
         return -1.0;
+    }
+}
+
+const char* print_trace_get_processing_stage_name(PrintTraceProcessingStage stage) {
+    switch (stage) {
+        case PRINT_TRACE_STAGE_LOADED: return "Loaded";
+        case PRINT_TRACE_STAGE_LIGHTBOX_CROPPED: return "Lightbox Cropped";
+        case PRINT_TRACE_STAGE_NORMALIZED: return "Normalized";
+        case PRINT_TRACE_STAGE_BOUNDARY_DETECTED: return "Boundary Detected";
+        case PRINT_TRACE_STAGE_OBJECT_DETECTED: return "Object Detected";
+        case PRINT_TRACE_STAGE_SMOOTHED: return "Smoothed";
+        case PRINT_TRACE_STAGE_DILATED: return "Dilated";
+        case PRINT_TRACE_STAGE_FINAL: return "Final";
+        default: return "Unknown Stage";
+    }
+}
+
+const char* print_trace_get_processing_stage_description(PrintTraceProcessingStage stage) {
+    switch (stage) {
+        case PRINT_TRACE_STAGE_LOADED: 
+            return "Image loaded and converted to grayscale";
+        case PRINT_TRACE_STAGE_LIGHTBOX_CROPPED: 
+            return "Perspective corrected to lightbox area - all subsequent images have uniform dimensions";
+        case PRINT_TRACE_STAGE_NORMALIZED: 
+            return "Lighting normalized using CLAHE for better contrast";
+        case PRINT_TRACE_STAGE_BOUNDARY_DETECTED: 
+            return "Lightbox boundary contour found and refined";
+        case PRINT_TRACE_STAGE_OBJECT_DETECTED: 
+            return "Main object contour extracted from warped image";
+        case PRINT_TRACE_STAGE_SMOOTHED: 
+            return "Contour smoothed for easier 3D printing (if enabled)";
+        case PRINT_TRACE_STAGE_DILATED: 
+            return "Contour dilated for manufacturing tolerance (if enabled)";
+        case PRINT_TRACE_STAGE_FINAL: 
+            return "Final validated contour ready for DXF export";
+        default: 
+            return "Unknown processing stage";
     }
 }

@@ -15,6 +15,19 @@ struct Arguments {
     double dilationMM = 0.0;
     bool enableSmoothing = false;
     double smoothingMM = 0.2;
+    
+    // Object detection parameters
+    bool useAdaptiveThreshold = false;
+    double manualThreshold = 0.0;      // 0 = auto
+    double thresholdOffset = 0.0;      // Offset from auto threshold
+    
+    // Morphological processing parameters
+    bool disableMorphology = false;    // Disable morphological cleaning
+    int morphKernelSize = 5;          // Morphological kernel size
+    
+    // Multi-contour detection parameters  
+    bool disableContourMerging = false; // Disable contour merging
+    double contourMergeDistance = 5.0;  // Contour merge distance in mm
 };
 
 Arguments parseArguments(int argc, char* argv[]) {
@@ -41,6 +54,20 @@ Arguments parseArguments(int argc, char* argv[]) {
         } else if ((arg == "--smooth-amount") && (i + 1 < argc)) {
             args.smoothingMM = stod(argv[++i]);
             args.enableSmoothing = true; // Auto-enable when amount is specified
+        } else if (arg == "--adaptive-threshold") {
+            args.useAdaptiveThreshold = true;
+        } else if ((arg == "--manual-threshold") && (i + 1 < argc)) {
+            args.manualThreshold = stod(argv[++i]);
+        } else if ((arg == "--threshold-offset") && (i + 1 < argc)) {
+            args.thresholdOffset = stod(argv[++i]);
+        } else if (arg == "--disable-morphology") {
+            args.disableMorphology = true;
+        } else if ((arg == "--morph-kernel-size") && (i + 1 < argc)) {
+            args.morphKernelSize = stoi(argv[++i]);
+        } else if (arg == "--disable-contour-merging") {
+            args.disableContourMerging = true;
+        } else if ((arg == "--contour-merge-distance") && (i + 1 < argc)) {
+            args.contourMergeDistance = stod(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             return args; // Will trigger usage display
         }
@@ -78,6 +105,17 @@ void printUsage(const char* progName) {
          << "  -t, --tolerance <mm>  Add tolerance/clearance in millimeters for 3D printing (default: 0.0)\n"
          << "  -s, --smooth  Enable smoothing to remove small details for easier 3D printing\n"
          << "  --smooth-amount <mm>  Smoothing amount in millimeters (default: 0.2, enables smoothing)\n"
+         << "\n"
+         << "Object Detection:\n"
+         << "  --adaptive-threshold  Use adaptive thresholding instead of Otsu (better for uneven lighting)\n"
+         << "  --manual-threshold <0-255>  Manual threshold value (0 = auto, overrides Otsu)\n"
+         << "  --threshold-offset <-50 to +50>  Adjust Otsu threshold by this amount (negative = more inclusive)\n"
+         << "  --disable-morphology  Disable morphological cleaning (preserves more peripheral detail)\n"
+         << "  --morph-kernel-size <3-15>  Size of morphological kernel (smaller = less aggressive cleaning)\n"
+         << "  --disable-contour-merging  Disable multi-contour merging (use single largest contour only)\n"
+         << "  --contour-merge-distance <1-20>  Max distance in mm to merge object parts (default: 5.0)\n"
+         << "\n"
+         << "General:\n"
          << "  -v, --verbose Enable verbose output\n"
          << "  -d, --debug   Enable debug visualization (saves step-by-step images)\n"
          << "  -h, --help    Show this help message\n"
@@ -88,18 +126,25 @@ void printUsage(const char* progName) {
          << "  " << progName << " -i photo.jpg -t 0.5  # Add 0.5mm tolerance for 3D printing\n"
          << "  " << progName << " -i photo.jpg -s      # Enable smoothing for easier printing\n"
          << "  " << progName << " -i photo.jpg -s -t 1.0  # Smooth + 1mm tolerance\n"
+         << "  " << progName << " -i photo.jpg --threshold-offset -15  # More inclusive thresholding\n"
+         << "  " << progName << " -i photo.jpg --manual-threshold 120  # Use specific threshold value\n"
+         << "  " << progName << " -i photo.jpg --adaptive-threshold    # Better for uneven lighting\n"
+         << "  " << progName << " -i photo.jpg --disable-morphology    # Preserve peripheral detail\n"
+         << "  " << progName << " -i photo.jpg --morph-kernel-size 3   # Gentle morphological cleaning\n"
+         << "  " << progName << " -i photo.jpg --disable-contour-merging # Use single largest contour only\n"
+         << "  " << progName << " -i photo.jpg --contour-merge-distance 2.0 # Merge parts within 2mm\n"
          << "  " << progName << " -i photo.jpg -v\n"
          << "  " << progName << " -i photo.jpg -d  # Saves debug images to ./debug/\n"
          << endl;
 }
 
 // Progress callback for verbose mode
-void progressCallback(double progress, const char* stage) {
+void progressCallback(double progress, const char* stage, void* user_data) {
     cout << "[PROGRESS] " << stage << ": " << (int)(progress * 100) << "%" << endl;
 }
 
 // Error callback for detailed error reporting
-void errorCallback(PrintTraceResult error_code, const char* error_message) {
+void errorCallback(PrintTraceResult error_code, const char* error_message, void* user_data) {
     cerr << "[ERROR] Code " << error_code << ": " << error_message << endl;
 }
 
@@ -150,6 +195,44 @@ int main(int argc, char* argv[]) {
         params.smoothing_amount_mm = args.smoothingMM;
         cout << "[INFO] 3D printing smoothing enabled: " << args.smoothingMM << "mm" << endl;
     }
+    
+    // Set object detection parameters if requested
+    if (args.useAdaptiveThreshold) {
+        params.use_adaptive_threshold = true;
+        cout << "[INFO] Using adaptive thresholding for object detection" << endl;
+    }
+    
+    if (args.manualThreshold > 0.0) {
+        params.manual_threshold = args.manualThreshold;
+        cout << "[INFO] Using manual threshold: " << args.manualThreshold << endl;
+    }
+    
+    if (args.thresholdOffset != 0.0) {
+        params.threshold_offset = args.thresholdOffset;
+        cout << "[INFO] Threshold offset: " << (args.thresholdOffset > 0 ? "+" : "") << args.thresholdOffset 
+             << " (more " << (args.thresholdOffset < 0 ? "inclusive" : "exclusive") << ")" << endl;
+    }
+    
+    if (args.disableMorphology) {
+        params.disable_morphology = true;
+        cout << "[INFO] Morphological cleaning disabled - preserving peripheral detail" << endl;
+    }
+    
+    if (args.morphKernelSize != 5) {
+        params.morph_kernel_size = args.morphKernelSize;
+        cout << "[INFO] Morphological kernel size: " << args.morphKernelSize 
+             << " (" << (args.morphKernelSize < 5 ? "gentler" : "more aggressive") << " cleaning)" << endl;
+    }
+    
+    if (args.disableContourMerging) {
+        params.merge_nearby_contours = false;
+        cout << "[INFO] Contour merging disabled - using single largest contour only" << endl;
+    }
+    
+    if (args.contourMergeDistance != 5.0) {
+        params.contour_merge_distance_mm = args.contourMergeDistance;
+        cout << "[INFO] Contour merge distance: " << args.contourMergeDistance << "mm" << endl;
+    }
 
     // Validate parameters
     PrintTraceResult validation_result = print_trace_validate_params(&params);
@@ -164,6 +247,18 @@ int main(int argc, char* argv[]) {
         cout << "  Real world size: " << params.real_world_size_mm << "mm" << endl;
         cout << "  Canny edges: " << params.canny_lower << "-" << params.canny_upper << endl;
         cout << "  CLAHE clip limit: " << params.clahe_clip_limit << endl;
+        cout << "  Object detection: ";
+        if (params.use_adaptive_threshold) {
+            cout << "adaptive threshold";
+        } else if (params.manual_threshold > 0.0) {
+            cout << "manual threshold (" << params.manual_threshold << ")";
+        } else {
+            cout << "Otsu auto-threshold";
+            if (params.threshold_offset != 0.0) {
+                cout << " with offset (" << (params.threshold_offset > 0 ? "+" : "") << params.threshold_offset << ")";
+            }
+        }
+        cout << endl;
         cout << "  Min contour area: " << params.min_contour_area << endl;
         cout << "  Min solidity: " << params.min_solidity << endl;
         cout << "  Polygon epsilon: " << params.polygon_epsilon_factor << endl;
@@ -187,7 +282,8 @@ int main(int argc, char* argv[]) {
         args.outputPath.c_str(),
         &params,
         args.verbose ? progressCallback : nullptr,
-        args.verbose ? errorCallback : nullptr
+        args.verbose ? errorCallback : nullptr,
+        nullptr  // No user data needed for CLI
     );
 
     if (result == PRINT_TRACE_SUCCESS) {

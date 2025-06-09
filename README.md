@@ -4,11 +4,15 @@ A high-performance C++ library for extracting object outlines from photos and ex
 
 ## Features
 
-- **High-performance C++ core** - Optimized image processing algorithms
+- **High-performance C++ core** - Optimized image processing algorithms  
 - **Clean C API** - Perfect for Swift, Python, and other language bindings
+- **Pipeline stage control** - Process to any intermediate step for UI visualization
+- **Advanced object detection** - Multi-contour merging preserves all object parts
+- **Configurable thresholding** - Manual, adaptive, or Otsu with offset controls
+- **Morphological control** - Disable or adjust cleaning to preserve detail
 - **Automatic perspective correction** - Detects document/lightbox boundaries
-- **Advanced noise reduction** - Morphological operations and Gaussian filtering
-- **Real-world scaling** - Accurate pixel-to-millimeter conversion
+- **Real-world scaling** - Accurate pixel-to-millimeter conversion with parameter ranges
+- **3D printing optimization** - Smoothing and tolerance features
 - **DXF export** - Industry-standard CAD-compatible vector format
 - **Easy integration** - pkg-config, CMake, and Swift Package Manager support
 - **Cross-platform** - Works on macOS, Linux, and Windows
@@ -121,12 +125,20 @@ make
 
 #### Command-Line Options
 
+**Basic Options:**
 - `-i, --input` - Input image file path (required)
 - `-o, --output` - Output DXF file path (optional, auto-generated if not specified)
 - `-t, --tolerance <mm>` - Add tolerance/clearance for 3D printing (default: 0.0)
 - `-s, --smooth` - Enable smoothing to remove small details
 - `-d, --debug` - Save debug images showing each processing step
 - `-v, --verbose` - Enable detailed output
+
+**Object Detection Controls:**
+- `--adaptive-threshold` - Use adaptive thresholding (better for uneven lighting)
+- `--manual-threshold <0-255>` - Manual threshold value (0 = auto, overrides Otsu)
+- `--threshold-offset <-50 to +50>` - Adjust Otsu threshold (negative = more inclusive)
+- `--disable-morphology` - Disable morphological cleaning (preserves peripheral detail)
+- `--morph-kernel-size <3-15>` - Size of morphological kernel (smaller = gentler cleaning)
 
 #### Examples
 
@@ -142,6 +154,21 @@ printtrace -i photo.jpg -s -t 0.5
 
 # Debug mode to see processing steps
 printtrace -i photo.jpg -d
+
+# Preserve peripheral detail (like small switches, tabs, etc.)
+printtrace -i photo.jpg --disable-morphology
+
+# More inclusive thresholding to capture fine details  
+printtrace -i photo.jpg --threshold-offset -15
+
+# Use adaptive thresholding for complex lighting
+printtrace -i photo.jpg --adaptive-threshold
+
+# Gentle morphological cleaning
+printtrace -i photo.jpg --morph-kernel-size 3
+
+# Manual threshold control
+printtrace -i photo.jpg --manual-threshold 120
 ```
 
 ## Library Integration
@@ -153,17 +180,51 @@ printtrace -i photo.jpg -d
 
 int main() {
     PrintTraceParams params;
-    outline_tool_get_default_params(&params);
+    print_trace_get_default_params(&params);
     
-    PrintTraceResult result = outline_tool_process_image_to_dxf(
+    // Basic processing
+    PrintTraceResult result = print_trace_process_image_to_dxf(
         "input.jpg", 
         "output.dxf", 
         &params, 
-        NULL, NULL
+        NULL, NULL, NULL
     );
     
-    return (result == OUTLINE_TOOL_SUCCESS) ? 0 : 1;
+    return (result == PRINT_TRACE_SUCCESS) ? 0 : 1;
 }
+```
+
+**Advanced Features:**
+
+```c
+// Process to specific pipeline stage for UI visualization
+PrintTraceImageData stage_image;
+PrintTraceContour contour;
+
+print_trace_process_to_stage(
+    "input.jpg", &params, 
+    PRINT_TRACE_STAGE_LIGHTBOX_CROPPED,  // Get perspective-corrected image
+    &stage_image, &contour,
+    NULL, NULL, NULL
+);
+
+// Clean up
+print_trace_free_image_data(&stage_image);
+print_trace_free_contour(&contour);
+```
+
+**Parameter Configuration:**
+
+```c
+// Get parameter ranges for UI sliders
+PrintTraceParamRanges ranges;
+print_trace_get_param_ranges(&ranges);
+
+// Configure object detection
+params.threshold_offset = -15.0;        // More inclusive thresholding
+params.disable_morphology = true;       // Preserve peripheral detail
+params.merge_nearby_contours = true;    // Handle multi-part objects
+params.contour_merge_distance_mm = 5.0; // Merge parts within 5mm
 ```
 
 Compile with: `gcc -lprinttrace myapp.c`

@@ -21,6 +21,19 @@ public:
         double claheClipLimit = 2.0;
         int claheTileSize = 8;
         
+        // Object detection parameters
+        bool useAdaptiveThreshold = false;
+        double manualThreshold = 0.0;     // 0 = auto
+        double thresholdOffset = 0.0;     // Offset from auto threshold
+        
+        // Morphological processing parameters
+        bool disableMorphology = false;   // Disable morphological operations
+        int morphKernelSize = 5;          // Morphological kernel size
+        
+        // Multi-contour detection parameters
+        bool mergeNearbyContours = true;  // Merge multiple contours into one object
+        double contourMergeDistanceMM = 5.0; // Max distance to merge contours in mm
+        
         // Contour filtering parameters (more permissive for real images)
         double minContourArea = 500.0;
         double minSolidity = 0.3;
@@ -72,6 +85,8 @@ public:
                                                int side, double realWorldSizeMM);
     
     static std::vector<cv::Point> findObjectContour(const cv::Mat& warpedImg, const ProcessingParams& params);
+    static std::vector<cv::Point> mergeNearbyContours(const std::vector<std::vector<cv::Point>>& contours,
+                                                      double mergeDistancePx, const ProcessingParams& params);
     static std::vector<cv::Point2f> refineContour(const std::vector<cv::Point>& contour,
                                                   const cv::Mat& grayImg,
                                                   const ProcessingParams& params);
@@ -104,6 +119,13 @@ public:
     static std::vector<cv::Point> processImageToContour(const std::string& inputPath, 
                                                        const ProcessingParams& params);
     static std::vector<cv::Point> processImageToContour(const std::string& inputPath);
+    
+    // Stage-controlled processing for API integration
+    static std::pair<cv::Mat, std::vector<cv::Point>> processImageToStage(
+        const std::string& inputPath, 
+        const ProcessingParams& params,
+        int target_stage  // Maps to PrintTraceProcessingStage
+    );
 };
 
 } // namespace PrintTrace
