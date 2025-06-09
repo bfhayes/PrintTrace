@@ -6,7 +6,7 @@
 using namespace cv;
 using namespace std;
 
-namespace OutlineTool {
+namespace PrintTrace {
 
 Mat ImageProcessor::loadImage(const string& path) {
     if (path.empty()) {
@@ -851,4 +851,4 @@ vector<Point> ImageProcessor::processImageToContour(const string& inputPath) {
     return processImageToContour(inputPath, params);
 }
 
-} // namespace OutlineTool
+} // namespace PrintTrace

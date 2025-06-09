@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# OutlineTool Dependency Installation Script
-# This script installs the minimal dependencies needed for OutlineTool
+# PrintTrace Dependency Installation Script
+# This script installs the minimal dependencies needed for PrintTrace
 # Note: libdxfrw is now included as a submodule and built automatically
 
 set -e
 
-echo "Installing OutlineTool dependencies..."
+echo "Installing PrintTrace dependencies..."
 
 # Check if we're on macOS
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -53,8 +53,8 @@ echo "libdxfrw is included as a submodule and will be built automatically."
 echo ""
 echo "Next steps:"
 echo "  1. Clone the repository with submodules:"
-echo "     git clone --recursive https://github.com/user/OutlineTool.git"
+echo "     git clone --recursive https://github.com/user/PrintTrace.git"
 echo "  2. Build the library:"
-echo "     cd OutlineTool && make lib"
+echo "     cd PrintTrace && make lib"
 echo "  3. Or if you already have the repo:"
 echo "     git submodule update --init --recursive && make lib"

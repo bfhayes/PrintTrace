@@ -1,10 +1,10 @@
 # Swift Package Manager Integration Guide
 
-This guide shows how to create a Swift Package that wraps the OutlineTool C++ library.
+This guide shows how to create a Swift Package that wraps the PrintTrace C++ library.
 
 ## Overview
 
-The OutlineTool library is designed to be easily integrated into Swift packages using the system library approach. This allows Swift developers to use the high-performance C++ image processing capabilities with a type-safe Swift API.
+The PrintTrace library is designed to be easily integrated into Swift packages using the system library approach. This allows Swift developers to use the high-performance C++ image processing capabilities with a type-safe Swift API.
 
 ## Integration Architecture
 
@@ -12,30 +12,30 @@ The OutlineTool library is designed to be easily integrated into Swift packages 
 Swift Package
 ├── Package.swift              # Package definition
 ├── Sources/
-│   ├── COutlineTool/          # System library wrapper
+│   ├── CPrintTrace/          # System library wrapper
 │   │   ├── module.modulemap   # C module definition
 │   │   └── shim.h            # Header imports
-│   └── OutlineTool/          # Swift wrapper
-│       └── OutlineTool.swift # Type-safe Swift API
+│   └── PrintTrace/          # Swift wrapper
+│       └── PrintTrace.swift # Type-safe Swift API
 └── Tests/
-    └── OutlineToolTests/     # Swift tests
+    └── PrintTraceTests/     # Swift tests
 ```
 
-## Step 1: Install OutlineTool Library
+## Step 1: Install PrintTrace Library
 
-First, clone and install the OutlineTool library system-wide:
+First, clone and install the PrintTrace library system-wide:
 
 ```bash
 # Clone with submodules
-git clone --recursive https://github.com/user/OutlineTool.git
-cd OutlineTool
+git clone --recursive https://github.com/user/PrintTrace.git
+cd PrintTrace
 
 # Build and install the library
 make install-lib
 
 # Verify installation
-pkg-config --exists outlinetool && echo "✅ OutlineTool found"
-pkg-config --cflags --libs outlinetool
+pkg-config --exists printtrace && echo "✅ PrintTrace found"
+pkg-config --cflags --libs printtrace
 ```
 
 ## Step 2: Create Swift Package
@@ -43,8 +43,8 @@ pkg-config --cflags --libs outlinetool
 Create a new Swift package:
 
 ```bash
-mkdir SwiftOutlineTool
-cd SwiftOutlineTool
+mkdir SwiftPrintTrace
+cd SwiftPrintTrace
 swift package init --type library
 ```
 
@@ -57,38 +57,38 @@ Update your `Package.swift`:
 import PackageDescription
 
 let package = Package(
-    name: "SwiftOutlineTool",
+    name: "SwiftPrintTrace",
     platforms: [
         .macOS(.v10_15),
         .iOS(.v13)
     ],
     products: [
         .library(
-            name: "SwiftOutlineTool",
-            targets: ["SwiftOutlineTool"]
+            name: "SwiftPrintTrace",
+            targets: ["SwiftPrintTrace"]
         )
     ],
     targets: [
-        // System library target for OutlineTool
+        // System library target for PrintTrace
         .systemLibrary(
-            name: "COutlineTool",
-            pkgConfig: "outlinetool",
+            name: "CPrintTrace",
+            pkgConfig: "printtrace",
             providers: [
-                .brew(["outlinetool"]),
-                .apt(["liboutlinetool-dev"])
+                .brew(["printtrace"]),
+                .apt(["libprinttrace-dev"])
             ]
         ),
         
         // Swift wrapper target
         .target(
-            name: "SwiftOutlineTool",
-            dependencies: ["COutlineTool"]
+            name: "SwiftPrintTrace",
+            dependencies: ["CPrintTrace"]
         ),
         
         // Tests
         .testTarget(
-            name: "SwiftOutlineToolTests",
-            dependencies: ["SwiftOutlineTool"]
+            name: "SwiftPrintTraceTests",
+            dependencies: ["SwiftPrintTrace"]
         )
     ]
 )
@@ -96,37 +96,37 @@ let package = Package(
 
 ## Step 4: Create System Library Module
 
-Create `Sources/COutlineTool/module.modulemap`:
+Create `Sources/CPrintTrace/module.modulemap`:
 
 ```c
-module COutlineTool {
+module CPrintTrace {
     header "shim.h"
-    link "outlinetool"
+    link "printtrace"
     export *
 }
 ```
 
-Create `Sources/COutlineTool/shim.h`:
+Create `Sources/CPrintTrace/shim.h`:
 
 ```c
-#ifndef COUTLINETOOL_SHIM_H
-#define COUTLINETOOL_SHIM_H
+#ifndef CPRINTTRACE_SHIM_H
+#define CPRINTTRACE_SHIM_H
 
-#include <OutlineToolAPI.h>
+#include <PrintTraceAPI.h>
 
-#endif /* COUTLINETOOL_SHIM_H */
+#endif /* CPRINTTRACE_SHIM_H */
 ```
 
 ## Step 5: Create Swift Wrapper
 
-Create `Sources/SwiftOutlineTool/OutlineTool.swift`:
+Create `Sources/SwiftPrintTrace/PrintTrace.swift`:
 
 ```swift
 import Foundation
-import COutlineTool
+import CPrintTrace
 
 @available(macOS 10.15, iOS 13.0, *)
-public class OutlineTool: ObservableObject {
+public class PrintTrace: ObservableObject {
     
     public struct ProcessingParams {
         public var warpSize: Int32 = 3240
@@ -138,8 +138,8 @@ public class OutlineTool: ObservableObject {
         
         public init() {}
         
-        internal func toCStruct() -> OutlineToolParams {
-            return OutlineToolParams(
+        internal func toCStruct() -> PrintTraceParams {
+            return PrintTraceParams(
                 warp_size: warpSize,
                 real_world_size_mm: realWorldSizeMM,
                 threshold_value: thresholdValue,
@@ -150,7 +150,7 @@ public class OutlineTool: ObservableObject {
         }
     }
     
-    public enum OutlineToolError: Error, LocalizedError {
+    public enum PrintTraceError: Error, LocalizedError {
         case invalidInput(String)
         case fileNotFound(String)
         case processingFailed(String)
@@ -171,17 +171,17 @@ public class OutlineTool: ObservableObject {
     
     public static func validateParams(_ params: ProcessingParams) throws {
         var cParams = params.toCStruct()
-        let result = outline_tool_validate_params(&cParams)
+        let result = print_trace_validate_params(&cParams)
         
-        if result != OUTLINE_TOOL_SUCCESS {
-            let message = String(cString: outline_tool_get_error_message(result))
-            throw OutlineToolError.processingFailed(message)
+        if result != PRINT_TRACE_SUCCESS {
+            let message = String(cString: print_trace_get_error_message(result))
+            throw PrintTraceError.processingFailed(message)
         }
     }
     
     public static func isValidImageFile(_ path: String) -> Bool {
         return path.withCString { cPath in
-            return outline_tool_is_valid_image_file(cPath)
+            return print_trace_is_valid_image_file(cPath)
         }
     }
     
@@ -208,7 +208,7 @@ public class OutlineTool: ObservableObject {
                 
                 let result = imagePath.withCString { cImagePath in
                     return outputPath.withCString { cOutputPath in
-                        return outline_tool_process_image_to_dxf(
+                        return print_trace_process_image_to_dxf(
                             cImagePath,
                             cOutputPath,
                             &cParams,
@@ -218,11 +218,11 @@ public class OutlineTool: ObservableObject {
                     }
                 }
                 
-                if result == OUTLINE_TOOL_SUCCESS {
+                if result == PRINT_TRACE_SUCCESS {
                     continuation.resume()
                 } else {
-                    let message = String(cString: outline_tool_get_error_message(result))
-                    continuation.resume(throwing: OutlineToolError.processingFailed(message))
+                    let message = String(cString: print_trace_get_error_message(result))
+                    continuation.resume(throwing: PrintTraceError.processingFailed(message))
                 }
             }
         }
@@ -232,27 +232,27 @@ public class OutlineTool: ObservableObject {
 
 ## Step 6: Create Tests
 
-Create `Tests/SwiftOutlineToolTests/SwiftOutlineToolTests.swift`:
+Create `Tests/SwiftPrintTraceTests/SwiftPrintTraceTests.swift`:
 
 ```swift
 import XCTest
-@testable import SwiftOutlineTool
+@testable import SwiftPrintTrace
 
-final class SwiftOutlineToolTests: XCTestCase {
+final class SwiftPrintTraceTests: XCTestCase {
     
     func testParameterValidation() throws {
-        let params = OutlineTool.ProcessingParams()
-        XCTAssertNoThrow(try OutlineTool.validateParams(params))
+        let params = PrintTrace.ProcessingParams()
+        XCTAssertNoThrow(try PrintTrace.validateParams(params))
     }
     
     func testFileValidation() {
-        XCTAssertFalse(OutlineTool.isValidImageFile("/nonexistent.jpg"))
+        XCTAssertFalse(PrintTrace.isValidImageFile("/nonexistent.jpg"))
     }
     
     func testInvalidParameters() {
-        var params = OutlineTool.ProcessingParams()
+        var params = PrintTrace.ProcessingParams()
         params.warpSize = -100
-        XCTAssertThrowsError(try OutlineTool.validateParams(params))
+        XCTAssertThrowsError(try PrintTrace.validateParams(params))
     }
 }
 ```
@@ -276,12 +276,12 @@ Once your Swift package is ready, others can use it:
 
 ```swift
 // In their Package.swift
-.package(url: "https://github.com/user/SwiftOutlineTool", from: "1.0.0")
+.package(url: "https://github.com/user/SwiftPrintTrace", from: "1.0.0")
 
 // In their Swift code
-import SwiftOutlineTool
+import SwiftPrintTrace
 
-let tool = OutlineTool()
+let tool = PrintTrace()
 try await tool.processImageToDXF(
     imagePath: "input.jpg",
     outputPath: "output.dxf"
@@ -295,10 +295,10 @@ try await tool.processImageToDXF(
 Create a Homebrew formula for easy installation:
 
 ```ruby
-class Outlinetool < Formula
+class Printtrace < Formula
   desc "Image outline extraction and DXF conversion library"
-  homepage "https://github.com/user/OutlineTool"
-  url "https://github.com/user/OutlineTool/archive/v1.0.0.tar.gz"
+  homepage "https://github.com/user/PrintTrace"
+  url "https://github.com/user/PrintTrace/archive/v1.0.0.tar.gz"
   
   depends_on "cmake" => :build
   depends_on "opencv"
@@ -315,8 +315,8 @@ end
 Users can build and install directly:
 
 ```bash
-git clone --recursive https://github.com/user/OutlineTool
-cd OutlineTool
+git clone --recursive https://github.com/user/PrintTrace
+cd PrintTrace
 make install-lib
 ```
 

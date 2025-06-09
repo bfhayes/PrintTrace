@@ -21,7 +21,7 @@ make release
 mkdir build && cd build && cmake .. && make
 ```
 
-The executable will be created as `build/OutlineTool`.
+The executable will be created as `build/PrintTrace`.
 
 ## Architecture Overview
 
@@ -87,7 +87,7 @@ Default processing parameters are defined in `ImageProcessor::ProcessingParams`:
 ### Usage Pattern
 
 ```bash
-./build/OutlineTool -i input.jpg [-o output.dxf]
+./build/PrintTrace -i input.jpg [-o output.dxf]
 ```
 
 The tool expects images with clear rectangular boundaries (lightbox/document) and objects on contrasting backgrounds.

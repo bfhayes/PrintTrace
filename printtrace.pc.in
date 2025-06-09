@@ -3,10 +3,10 @@ exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
 
-Name: OutlineTool
+Name: PrintTrace
 Description: Image outline extraction and DXF conversion library
 Version: @PROJECT_VERSION@
-URL: https://github.com/user/OutlineTool
+URL: https://github.com/user/PrintTrace
 Requires: opencv4
-Libs: -L${libdir} -loutlinetool
+Libs: -L${libdir} -lprinttrace
 Cflags: -I${includedir}

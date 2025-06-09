@@ -9,7 +9,13 @@
       "Bash(export:*)",
       "Bash(swift run:*)",
       "Bash(swift:*)",
-      "Bash(./build/outlinetool:*)"
+      "Bash(./build/outlinetool:*)",
+      "Bash(ls:*)",
+      "Bash(mv:*)",
+      "Bash(/opt/homebrew/bin/rg -i \"outlinetool\" --type-not git --no-heading --line-number)",
+      "Bash(/opt/homebrew/bin/rg -i \"outlinetool\" --no-heading --line-number)",
+      "Bash(cmake:*)",
+      "Bash(./PrintTrace --help)"
     ],
     "deny": []
   }

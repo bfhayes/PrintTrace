@@ -1,4 +1,4 @@
-# OutlineTool Makefile
+# PrintTrace Makefile
 # Simple wrapper around CMake for easier building
 
 .PHONY: all build clean install debug release test help lib dylib cli tool executable install-lib
@@ -8,27 +8,27 @@ all: lib
 
 # Build the project (Release mode by default)
 build:
-	@echo "Building OutlineTool..."
+	@echo "Building PrintTrace..."
 	@mkdir -p build
 	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release
 	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-	@echo "Build complete! Executable: build/OutlineTool"
+	@echo "Build complete! Executable: build/PrintTrace"
 
 # Debug build
 debug:
-	@echo "Building OutlineTool (Debug)..."
+	@echo "Building PrintTrace (Debug)..."
 	@mkdir -p build
 	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Debug
 	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-	@echo "Debug build complete! Executable: build/OutlineTool"
+	@echo "Debug build complete! Executable: build/PrintTrace"
 
 # Release build (explicit)
 release:
-	@echo "Building OutlineTool (Release)..."
+	@echo "Building PrintTrace (Release)..."
 	@mkdir -p build
 	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release
 	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-	@echo "Release build complete! Executable: build/OutlineTool"
+	@echo "Release build complete! Executable: build/PrintTrace"
 
 # Clean build directory
 clean:
@@ -38,56 +38,56 @@ clean:
 
 # Install the built executable
 install: build
-	@echo "Installing OutlineTool..."
+	@echo "Installing PrintTrace..."
 	@cd build && make install
 	@echo "Installation complete."
 
 # Build shared library only (primary target)
 lib dylib:
-	@echo "Building OutlineTool shared library..."
+	@echo "Building PrintTrace shared library..."
 	@mkdir -p build
 	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXECUTABLE=OFF -DBUILD_SHARED_LIB=ON
 	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-	@echo "✅ Shared library complete! Library: build/liboutlinetool.dylib"
-	@echo "📋 Header available at: include/OutlineToolAPI.h"
+	@echo "✅ Shared library complete! Library: build/libprinttrace.dylib"
+	@echo "📋 Header available at: include/PrintTraceAPI.h"
 
 # Install library to system (requires sudo)
 install-lib: lib
-	@echo "Installing OutlineTool library to system..."
+	@echo "Installing PrintTrace library to system..."
 	@cd build && sudo make install
 	@echo "✅ Library installed! Now available via pkg-config:"
-	@echo "   pkg-config --cflags --libs outlinetool"
+	@echo "   pkg-config --cflags --libs printtrace"
 
 # Build CLI tool (uses shared library)
 cli tool:
-	@echo "Building OutlineTool CLI tool..."
+	@echo "Building PrintTrace CLI tool..."
 	@mkdir -p build
 	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_CLI_TOOL=ON -DBUILD_SHARED_LIB=ON -DBUILD_EXECUTABLE=OFF
 	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-	@echo "✅ CLI tool complete! Binary: build/outlinetool"
-	@echo "📋 Uses shared library: build/liboutlinetool.dylib"
+	@echo "✅ CLI tool complete! Binary: build/printtrace"
+	@echo "📋 Uses shared library: build/libprinttrace.dylib"
 
 # Build executable only (monolithic)
 executable:
-	@echo "Building OutlineTool executable (monolithic)..."
+	@echo "Building PrintTrace executable (monolithic)..."
 	@mkdir -p build
 	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXECUTABLE=ON -DBUILD_SHARED_LIB=OFF -DBUILD_CLI_TOOL=OFF
 	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-	@echo "✅ Executable complete! Binary: build/OutlineTool"
+	@echo "✅ Executable complete! Binary: build/PrintTrace"
 
 # Test build (build and run basic test)
 test: build
-	@echo "Testing OutlineTool..."
-	@if [ -x build/OutlineTool ]; then \
+	@echo "Testing PrintTrace..."
+	@if [ -x build/PrintTrace ]; then \
 		echo "✓ Executable built successfully"; \
-		build/OutlineTool --help 2>/dev/null || build/OutlineTool || echo "✓ Binary runs"; \
+		build/PrintTrace --help 2>/dev/null || build/PrintTrace || echo "✓ Binary runs"; \
 	else \
 		echo "✗ Executable not found"; \
 		exit 1; \
 	fi
-	@if [ -f build/liboutlinetool.dylib ]; then \
+	@if [ -f build/libprinttrace.dylib ]; then \
 		echo "✓ Shared library built successfully"; \
-		file build/liboutlinetool.dylib; \
+		file build/libprinttrace.dylib; \
 	else \
 		echo "✗ Shared library not found"; \
 	fi
@@ -102,7 +102,7 @@ configure:
 
 # Show help
 help:
-	@echo "OutlineTool Build System"
+	@echo "PrintTrace Build System"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  all         - Build shared library (default)"
@@ -128,10 +128,10 @@ help:
 	@echo "  make cli                      # Build CLI tool using shared library"
 	@echo "  make install-lib              # Install library system-wide"
 	@echo "  make executable               # Build standalone executable"
-	@echo "  ./build/outlinetool -i input.jpg -o output.dxf"
+	@echo "  ./build/printtrace -i input.jpg -o output.dxf"
 	@echo ""
 	@echo "Library Integration:"
-	@echo "  C/C++:   gcc -loutlinetool myapp.c"
+	@echo "  C/C++:   gcc -lprinttrace myapp.c"
 	@echo "  Swift:   Use in Swift Package Manager (see docs)"
-	@echo "  CMake:   find_package(OutlineTool REQUIRED)"
-	@echo "  pkg-config: pkg-config --cflags --libs outlinetool"
+	@echo "  CMake:   find_package(PrintTrace REQUIRED)"
+	@echo "  pkg-config: pkg-config --cflags --libs printtrace"

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace OutlineTool {
+namespace PrintTrace {
 
 class ImageProcessor {
 public:
@@ -106,4 +106,4 @@ public:
     static std::vector<cv::Point> processImageToContour(const std::string& inputPath);
 };
 
-} // namespace OutlineTool
+} // namespace PrintTrace

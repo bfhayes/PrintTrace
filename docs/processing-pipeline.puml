@@ -1,0 +1,69 @@
+@startuml processing-pipeline
+!theme plain
+skinparam backgroundColor white
+skinparam defaultFontSize 12
+skinparam boxPadding 10
+
+title PrintTrace Processing Pipeline
+
+start
+
+:📷 **Load Image**
+Read input photo;
+
+:🔦 **Normalize Lighting**
+Apply CLAHE to even out lighting;
+
+:⬜ **Detect Lightbox**
+Find bright white square boundary
+using intensity thresholding;
+
+:📐 **Perspective Correction**
+Warp image to remove camera angle
+using 4-corner transformation;
+
+:🎯 **Object Detection**
+Find object using binary thresholding
+(dark object on white background);
+
+:✨ **Detail Preservation**
+Keep original contour points
+(no approximation for maximum detail);
+
+if (Smoothing enabled?) then (yes)
+  :🪚 **Smoothing**
+  Remove small details using
+  morphological operations;
+else (no)
+  :Skip smoothing;
+endif
+
+if (Tolerance > 0?) then (yes)
+  :📏 **Add Tolerance**
+  Expand outline by specified
+  amount for fitting clearance;
+else (no)
+  :Skip tolerance;
+endif
+
+:💾 **Export to DXF**
+Save as CAD-compatible
+vector file with real-world
+coordinates in millimeters;
+
+stop
+
+note right
+  **Debug Mode (-d)**
+  Saves intermediate images
+  at each step for visualization
+end note
+
+note left
+  **3D Printing Features**
+  • Smoothing removes print artifacts
+  • Tolerance adds fitting clearance
+  • Real-world scale accuracy
+end note
+
+@enduml

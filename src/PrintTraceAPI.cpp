@@ -1,4 +1,4 @@
-#include "OutlineToolAPI.h"
+#include "PrintTraceAPI.h"
 #include "ImageProcessor.hpp"
 #include "DXFWriter.hpp"
 #include <iostream>
@@ -6,13 +6,13 @@
 #include <cstring>
 #include <cstdlib>
 
-using namespace OutlineTool;
+using namespace PrintTrace;
 
 // Internal helper functions
 namespace {
     
     // Convert C parameters to C++ parameters
-    ImageProcessor::ProcessingParams convertParams(const OutlineToolParams* params) {
+    ImageProcessor::ProcessingParams convertParams(const PrintTraceParams* params) {
         ImageProcessor::ProcessingParams cpp_params;
         if (params) {
             cpp_params.warpSize = params->warp_size;
@@ -49,12 +49,12 @@ namespace {
     }
     
     // Convert C++ contour to C contour
-    void convertContour(const std::vector<cv::Point>& cpp_contour, double pixels_per_mm, OutlineToolContour* c_contour) {
+    void convertContour(const std::vector<cv::Point>& cpp_contour, double pixels_per_mm, PrintTraceContour* c_contour) {
         c_contour->point_count = static_cast<int32_t>(cpp_contour.size());
         c_contour->pixels_per_mm = pixels_per_mm;
         
         if (c_contour->point_count > 0) {
-            c_contour->points = static_cast<OutlineToolPoint*>(malloc(sizeof(OutlineToolPoint) * c_contour->point_count));
+            c_contour->points = static_cast<PrintTracePoint*>(malloc(sizeof(PrintTracePoint) * c_contour->point_count));
             
             for (int i = 0; i < c_contour->point_count; i++) {
                 c_contour->points[i].x = static_cast<double>(cpp_contour[i].x);
@@ -66,29 +66,29 @@ namespace {
     }
     
     // Convert C++ exception to error code
-    OutlineToolResult handleException(const std::exception& e, OutlineToolErrorCallback error_callback) {
+    PrintTraceResult handleException(const std::exception& e, PrintTraceErrorCallback error_callback) {
         if (error_callback) {
-            error_callback(OUTLINE_TOOL_ERROR_PROCESSING_FAILED, e.what());
+            error_callback(PRINT_TRACE_ERROR_PROCESSING_FAILED, e.what());
         }
         
         std::string what = e.what();
         if (what.find("Failed to load image") != std::string::npos) {
-            return OUTLINE_TOOL_ERROR_IMAGE_LOAD_FAILED;
+            return PRINT_TRACE_ERROR_IMAGE_LOAD_FAILED;
         } else if (what.find("too small") != std::string::npos) {
-            return OUTLINE_TOOL_ERROR_IMAGE_TOO_SMALL;
+            return PRINT_TRACE_ERROR_IMAGE_TOO_SMALL;
         } else if (what.find("No contours found") != std::string::npos) {
-            return OUTLINE_TOOL_ERROR_NO_CONTOURS;
+            return PRINT_TRACE_ERROR_NO_CONTOURS;
         } else if (what.find("4 corners") != std::string::npos) {
-            return OUTLINE_TOOL_ERROR_NO_BOUNDARY;
+            return PRINT_TRACE_ERROR_NO_BOUNDARY;
         } else if (what.find("No contours found for the object") != std::string::npos) {
-            return OUTLINE_TOOL_ERROR_NO_OBJECT;
+            return PRINT_TRACE_ERROR_NO_OBJECT;
         }
         
-        return OUTLINE_TOOL_ERROR_PROCESSING_FAILED;
+        return PRINT_TRACE_ERROR_PROCESSING_FAILED;
     }
     
     // Progress reporting helper
-    void reportProgress(OutlineToolProgressCallback callback, double progress, const char* stage) {
+    void reportProgress(PrintTraceProgressCallback callback, double progress, const char* stage) {
         if (callback) {
             callback(progress, stage);
         }
@@ -97,7 +97,7 @@ namespace {
 
 // API Implementation
 
-void outline_tool_get_default_params(OutlineToolParams* params) {
+void print_trace_get_default_params(PrintTraceParams* params) {
     if (!params) return;
     
     params->warp_size = 3240;
@@ -139,91 +139,91 @@ void outline_tool_get_default_params(OutlineToolParams* params) {
     params->enable_debug_output = false;
 }
 
-OutlineToolResult outline_tool_validate_params(const OutlineToolParams* params) {
-    if (!params) return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+PrintTraceResult print_trace_validate_params(const PrintTraceParams* params) {
+    if (!params) return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     
     // Basic parameters
     if (params->warp_size <= 0 || params->warp_size > 10000) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     if (params->real_world_size_mm <= 0.0 || params->real_world_size_mm > 1000.0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Canny edge detection parameters
     if (params->canny_lower < 0.0 || params->canny_lower > 500.0 ||
         params->canny_upper < 0.0 || params->canny_upper > 500.0 ||
         params->canny_lower >= params->canny_upper) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     if (params->canny_aperture < 3 || params->canny_aperture > 7 || params->canny_aperture % 2 == 0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // CLAHE parameters
     if (params->clahe_clip_limit < 0.1 || params->clahe_clip_limit > 10.0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     if (params->clahe_tile_size < 2 || params->clahe_tile_size > 32) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Contour filtering parameters
     if (params->min_contour_area < 10.0 || params->min_contour_area > 1000000.0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     if (params->min_solidity < 0.1 || params->min_solidity > 1.0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     if (params->max_aspect_ratio < 1.0 || params->max_aspect_ratio > 50.0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Polygon approximation
     if (params->polygon_epsilon_factor < 0.0001 || params->polygon_epsilon_factor > 0.1) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Sub-pixel refinement
     if (params->corner_win_size < 3 || params->corner_win_size > 15) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Validation parameters
     if (params->min_perimeter < 10.0 || params->min_perimeter > 10000.0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Dilation parameters
     if (params->dilation_amount_mm < 0.0 || params->dilation_amount_mm > 50.0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
     // Smoothing parameters
     if (params->smoothing_amount_mm < 0.0 || params->smoothing_amount_mm > 10.0) {
-        return OUTLINE_TOOL_ERROR_INVALID_PARAMETERS;
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
-    return OUTLINE_TOOL_SUCCESS;
+    return PRINT_TRACE_SUCCESS;
 }
 
-OutlineToolResult outline_tool_process_image_to_contour(
+PrintTraceResult print_trace_process_image_to_contour(
     const char* input_path,
-    const OutlineToolParams* params,
-    OutlineToolContour* contour,
-    OutlineToolProgressCallback progress_callback,
-    OutlineToolErrorCallback error_callback
+    const PrintTraceParams* params,
+    PrintTraceContour* contour,
+    PrintTraceProgressCallback progress_callback,
+    PrintTraceErrorCallback error_callback
 ) {
     if (!input_path || !contour) {
         if (error_callback) {
-            error_callback(OUTLINE_TOOL_ERROR_INVALID_INPUT, "Invalid input parameters");
+            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid input parameters");
         }
-        return OUTLINE_TOOL_ERROR_INVALID_INPUT;
+        return PRINT_TRACE_ERROR_INVALID_INPUT;
     }
     
     // Initialize contour
@@ -235,20 +235,20 @@ OutlineToolResult outline_tool_process_image_to_contour(
     std::ifstream file(input_path);
     if (!file.good()) {
         if (error_callback) {
-            error_callback(OUTLINE_TOOL_ERROR_FILE_NOT_FOUND, "Input file not found or not readable");
+            error_callback(PRINT_TRACE_ERROR_FILE_NOT_FOUND, "Input file not found or not readable");
         }
-        return OUTLINE_TOOL_ERROR_FILE_NOT_FOUND;
+        return PRINT_TRACE_ERROR_FILE_NOT_FOUND;
     }
     
     // Validate parameters
-    OutlineToolParams default_params;
+    PrintTraceParams default_params;
     if (!params) {
-        outline_tool_get_default_params(&default_params);
+        print_trace_get_default_params(&default_params);
         params = &default_params;
     }
     
-    OutlineToolResult validation_result = outline_tool_validate_params(params);
-    if (validation_result != OUTLINE_TOOL_SUCCESS) {
+    PrintTraceResult validation_result = print_trace_validate_params(params);
+    if (validation_result != PRINT_TRACE_SUCCESS) {
         if (error_callback) {
             error_callback(validation_result, "Invalid processing parameters");
         }
@@ -274,7 +274,7 @@ OutlineToolResult outline_tool_process_image_to_contour(
         
         reportProgress(progress_callback, 1.0, "CAD-optimized processing complete");
         
-        return OUTLINE_TOOL_SUCCESS;
+        return PRINT_TRACE_SUCCESS;
         
     } catch (const std::invalid_argument& e) {
         return handleException(e, error_callback);
@@ -285,16 +285,16 @@ OutlineToolResult outline_tool_process_image_to_contour(
     }
 }
 
-OutlineToolResult outline_tool_save_contour_to_dxf(
-    const OutlineToolContour* contour,
+PrintTraceResult print_trace_save_contour_to_dxf(
+    const PrintTraceContour* contour,
     const char* output_path,
-    OutlineToolErrorCallback error_callback
+    PrintTraceErrorCallback error_callback
 ) {
     if (!contour || !output_path || !contour->points || contour->point_count <= 0) {
         if (error_callback) {
-            error_callback(OUTLINE_TOOL_ERROR_INVALID_INPUT, "Invalid contour or output path");
+            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid contour or output path");
         }
-        return OUTLINE_TOOL_ERROR_INVALID_INPUT;
+        return PRINT_TRACE_ERROR_INVALID_INPUT;
     }
     
     try {
@@ -314,53 +314,53 @@ OutlineToolResult outline_tool_save_contour_to_dxf(
         
         if (!success) {
             if (error_callback) {
-                error_callback(OUTLINE_TOOL_ERROR_DXF_WRITE_FAILED, "Failed to write DXF file");
+                error_callback(PRINT_TRACE_ERROR_DXF_WRITE_FAILED, "Failed to write DXF file");
             }
-            return OUTLINE_TOOL_ERROR_DXF_WRITE_FAILED;
+            return PRINT_TRACE_ERROR_DXF_WRITE_FAILED;
         }
         
-        return OUTLINE_TOOL_SUCCESS;
+        return PRINT_TRACE_SUCCESS;
         
     } catch (const std::exception& e) {
         return handleException(e, error_callback);
     }
 }
 
-OutlineToolResult outline_tool_process_image_to_dxf(
+PrintTraceResult print_trace_process_image_to_dxf(
     const char* input_path,
     const char* output_path,
-    const OutlineToolParams* params,
-    OutlineToolProgressCallback progress_callback,
-    OutlineToolErrorCallback error_callback
+    const PrintTraceParams* params,
+    PrintTraceProgressCallback progress_callback,
+    PrintTraceErrorCallback error_callback
 ) {
     if (!input_path || !output_path) {
         if (error_callback) {
-            error_callback(OUTLINE_TOOL_ERROR_INVALID_INPUT, "Invalid input or output path");
+            error_callback(PRINT_TRACE_ERROR_INVALID_INPUT, "Invalid input or output path");
         }
-        return OUTLINE_TOOL_ERROR_INVALID_INPUT;
+        return PRINT_TRACE_ERROR_INVALID_INPUT;
     }
     
-    OutlineToolContour contour = {nullptr, 0, 0.0};
+    PrintTraceContour contour = {nullptr, 0, 0.0};
     
     // Process image to contour
-    OutlineToolResult result = outline_tool_process_image_to_contour(
+    PrintTraceResult result = print_trace_process_image_to_contour(
         input_path, params, &contour, progress_callback, error_callback
     );
     
-    if (result != OUTLINE_TOOL_SUCCESS) {
+    if (result != PRINT_TRACE_SUCCESS) {
         return result;
     }
     
     // Save contour to DXF
-    result = outline_tool_save_contour_to_dxf(&contour, output_path, error_callback);
+    result = print_trace_save_contour_to_dxf(&contour, output_path, error_callback);
     
     // Clean up
-    outline_tool_free_contour(&contour);
+    print_trace_free_contour(&contour);
     
     return result;
 }
 
-void outline_tool_free_contour(OutlineToolContour* contour) {
+void print_trace_free_contour(PrintTraceContour* contour) {
     if (contour && contour->points) {
         free(contour->points);
         contour->points = nullptr;
@@ -369,28 +369,28 @@ void outline_tool_free_contour(OutlineToolContour* contour) {
     }
 }
 
-const char* outline_tool_get_error_message(OutlineToolResult error_code) {
+const char* print_trace_get_error_message(PrintTraceResult error_code) {
     switch (error_code) {
-        case OUTLINE_TOOL_SUCCESS: return "Success";
-        case OUTLINE_TOOL_ERROR_INVALID_INPUT: return "Invalid input parameters";
-        case OUTLINE_TOOL_ERROR_FILE_NOT_FOUND: return "Input file not found or not readable";
-        case OUTLINE_TOOL_ERROR_IMAGE_LOAD_FAILED: return "Failed to load image - check format and file integrity";
-        case OUTLINE_TOOL_ERROR_IMAGE_TOO_SMALL: return "Image too small - minimum 100x100 pixels required";
-        case OUTLINE_TOOL_ERROR_NO_CONTOURS: return "No contours found in image - ensure good contrast";
-        case OUTLINE_TOOL_ERROR_NO_BOUNDARY: return "Could not detect rectangular boundary - ensure clear document edges";
-        case OUTLINE_TOOL_ERROR_NO_OBJECT: return "No object found after processing - check image quality";
-        case OUTLINE_TOOL_ERROR_DXF_WRITE_FAILED: return "Failed to write DXF file - check output path permissions";
-        case OUTLINE_TOOL_ERROR_INVALID_PARAMETERS: return "Invalid processing parameters - check parameter ranges";
-        case OUTLINE_TOOL_ERROR_PROCESSING_FAILED: return "Image processing failed - see error callback for details";
+        case PRINT_TRACE_SUCCESS: return "Success";
+        case PRINT_TRACE_ERROR_INVALID_INPUT: return "Invalid input parameters";
+        case PRINT_TRACE_ERROR_FILE_NOT_FOUND: return "Input file not found or not readable";
+        case PRINT_TRACE_ERROR_IMAGE_LOAD_FAILED: return "Failed to load image - check format and file integrity";
+        case PRINT_TRACE_ERROR_IMAGE_TOO_SMALL: return "Image too small - minimum 100x100 pixels required";
+        case PRINT_TRACE_ERROR_NO_CONTOURS: return "No contours found in image - ensure good contrast";
+        case PRINT_TRACE_ERROR_NO_BOUNDARY: return "Could not detect rectangular boundary - ensure clear document edges";
+        case PRINT_TRACE_ERROR_NO_OBJECT: return "No object found after processing - check image quality";
+        case PRINT_TRACE_ERROR_DXF_WRITE_FAILED: return "Failed to write DXF file - check output path permissions";
+        case PRINT_TRACE_ERROR_INVALID_PARAMETERS: return "Invalid processing parameters - check parameter ranges";
+        case PRINT_TRACE_ERROR_PROCESSING_FAILED: return "Image processing failed - see error callback for details";
         default: return "Unknown error";
     }
 }
 
-const char* outline_tool_get_version(void) {
+const char* print_trace_get_version(void) {
     return "1.0.0";
 }
 
-bool outline_tool_is_valid_image_file(const char* file_path) {
+bool print_trace_is_valid_image_file(const char* file_path) {
     if (!file_path) return false;
     
     try {
@@ -401,7 +401,7 @@ bool outline_tool_is_valid_image_file(const char* file_path) {
     }
 }
 
-double outline_tool_estimate_processing_time(const char* image_path) {
+double print_trace_estimate_processing_time(const char* image_path) {
     if (!image_path) return -1.0;
     
     try {

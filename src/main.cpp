@@ -6,7 +6,7 @@
 #include <fstream>
 
 using namespace std;
-using namespace OutlineTool;
+using namespace PrintTrace;
 
 struct Arguments {
     string inputPath;
@@ -48,7 +48,7 @@ Arguments parseArguments(int argc, char* argv[]) {
 }
 
 void printUsage(const char* progName) {
-    cout << "OutlineTool - Convert image outlines to DXF format\n"
+    cout << "PrintTrace - Convert image outlines to DXF format\n"
          << "\n"
          << "Usage: " << progName << " -i <input_image> [-o <output_dxf>]\n"
          << "\n"

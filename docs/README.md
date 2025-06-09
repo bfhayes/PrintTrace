@@ -1,123 +1,89 @@
-# OutlineTool - Architecture Documentation
+# PrintTrace - How It Works
 
-This directory contains comprehensive PlantUML documentation explaining the design and architecture of the OutlineTool application.
+PrintTrace converts photos of objects on a lightbox into precise DXF outlines for 3D printing and CAD applications.
 
-## Documentation Overview
+## Processing Pipeline
 
-### 📋 Available Diagrams
+The tool follows a 9-step process to extract clean outlines:
 
-| Diagram | File | Description |
-|---------|------|-------------|
-| **Class Architecture** | [`class-diagram.puml`](class-diagram.puml) | Shows the main classes, their relationships, and responsibilities |
-| **Processing Sequence** | [`sequence-diagram.puml`](sequence-diagram.puml) | Illustrates the complete image processing workflow step-by-step |
-| **Component Architecture** | [`component-diagram.puml`](component-diagram.puml) | High-level system components and their interactions |
-| **Data Flow** | [`data-flow-diagram.puml`](data-flow-diagram.puml) | How data moves through the processing pipeline |
-| **Deployment** | [`deployment-diagram.puml`](deployment-diagram.puml) | Build and runtime environment architecture |
-| **Design Patterns** | [`design-patterns.puml`](design-patterns.puml) | Software design patterns used in the codebase |
+![Processing Pipeline](processing-pipeline.svg)
 
-### 🔍 Key Architectural Concepts
+### Step-by-Step Process
 
-#### 1. **Modular Design**
-- **ImageProcessor**: Pure static utility functions for image processing
-- **DXFWriter**: Adapter for DXF file generation
-- **Main**: Command-line interface and orchestration
+1. **Load Image** - Read the input photo
+2. **Normalize Lighting** - Even out lighting using CLAHE
+3. **Detect Lightbox** - Find the bright white square boundary
+4. **Perspective Correction** - Warp image to remove camera angle
+5. **Object Detection** - Find the object using binary thresholding
+6. **Detail Preservation** - Keep original contour points (no approximation)
+7. **Smoothing** *(optional)* - Remove small details for easier 3D printing
+8. **Add Tolerance** *(optional)* - Expand outline for fitting clearance
+9. **Export to DXF** - Save as CAD-compatible vector file
 
-#### 2. **Design Patterns Used**
-- **Static Utility Pattern**: ImageProcessor with stateless functions
-- **Parameter Object Pattern**: ProcessingParams to encapsulate configuration
-- **Adapter Pattern**: DXFWriter bridges OpenCV and libdxfrw
-- **Bridge Pattern**: Separation between high-level DXF operations and low-level library
-- **Template Method Pattern**: Standardized processing pipeline
+## Key Features
 
-#### 3. **Data Processing Pipeline**
-```
-Image Input → Preprocessing → Boundary Detection → 
-Perspective Correction → Noise Reduction → 
-Object Extraction → DXF Export
-```
+### 📐 Real-World Accuracy
+- Calibrates pixel-to-millimeter conversion using the lightbox size
+- Sub-pixel corner refinement for maximum precision
+- Maintains measurement accuracy throughout the pipeline
 
-### 🛠️ Viewing the Diagrams
+### 🖨️ 3D Printing Optimized
+- **Smoothing**: Removes tiny details that cause print artifacts
+- **Tolerance**: Adds clearance for parts to fit properly
+- **Clean geometry**: Produces printer-friendly outlines
 
-#### Option 1: PlantUML Online Server
-Visit [PlantUML Server](http://www.plantuml.com/plantuml/uml/) and paste the content of any `.puml` file.
+### 🔍 Debug Visualization
+Enable debug mode (`-d`) to see each processing step:
+- `01_original.jpg` - Input photo
+- `07_warped.jpg` - After perspective correction
+- `08_object_contour.jpg` - Detected object outline
+- `09_smoothed_contour.jpg` - After smoothing (if enabled)
+- `10_dilated_contour.jpg` - Final result with tolerance
 
-#### Option 2: VS Code Extension
-1. Install the "PlantUML" extension in VS Code
-2. Open any `.puml` file
-3. Press `Alt+D` to preview the diagram
+## Usage Examples
 
-#### Option 3: Local PlantUML Installation
 ```bash
-# Install PlantUML (requires Java)
-brew install plantuml  # macOS
-# or
-sudo apt install plantuml  # Ubuntu
+# Basic outline extraction
+printtrace -i photo.jpg
 
-# Generate PNG images
-plantuml docs/*.puml
+# 3D printing case with 1mm clearance
+printtrace -i photo.jpg -t 1.0
 
-# Generate SVG images
-plantuml -tsvg docs/*.puml
+# Smooth outline for easier printing
+printtrace -i photo.jpg -s -t 0.5
+
+# See all processing steps
+printtrace -i photo.jpg -d
 ```
 
-#### Option 4: Online PlantUML Editor
-Use [PlantText](https://www.planttext.com/) for interactive editing and viewing.
+## Best Practices
 
-### 📖 Diagram Descriptions
+### Photography Setup
+- Use a **backlit white square** (lightbox) as background
+- Place object **centered** on the lightbox
+- Ensure **good contrast** between object and background
+- Take photo from **directly above** when possible
 
-#### Class Diagram
-- Shows the three main classes: `ImageProcessor`, `DXFWriter`, and `ProcessingParams`
-- Illustrates inheritance from `DRW_Interface`
-- Highlights the static utility pattern used throughout
+### 3D Printing Tips
+- Use **smoothing** (`-s`) to remove small details
+- Add **tolerance** (`-t 1.0`) for fitting clearance
+- Start with 0.5-1.0mm tolerance and adjust as needed
 
-#### Sequence Diagram
-- Complete workflow from command-line input to DXF output
-- Shows interactions between main components
-- Illustrates error handling paths
+### Troubleshooting
+- If lightbox detection fails: Ensure good lighting contrast
+- If object outline is incomplete: Check for shadows or reflections
+- If tolerance is wrong: Verify the real-world lightbox size (default: 162mm)
 
-#### Component Diagram
-- High-level system architecture
-- External dependencies (OpenCV, libdxfrw)
-- Component responsibilities and interfaces
+## Output Format
 
-#### Data Flow Diagram
-- Six-stage processing pipeline
-- Data transformations at each stage
-- Input validation and output generation
+The DXF file contains:
+- **Closed polyline** representing the object outline
+- **Real-world coordinates** in millimeters
+- **CAD-compatible** format for import into design software
 
-#### Deployment Diagram
-- Build environment and dependencies
-- Runtime requirements
-- Distribution and packaging options
+## Technical Details
 
-#### Design Patterns
-- Detailed explanation of patterns used
-- Benefits and trade-offs of each pattern
-- Future extensibility considerations
-
-### 🏗️ Architecture Principles
-
-1. **Separation of Concerns**: Each class has a single responsibility
-2. **Modularity**: Components can be developed and tested independently
-3. **Stateless Design**: No mutable state, pure functional approach
-4. **Dependency Inversion**: High-level modules don't depend on low-level details
-5. **Interface Segregation**: Clean, focused interfaces for each component
-
-### 🔮 Future Architecture Considerations
-
-The current design supports easy extension for:
-- Multiple image processing algorithms (Strategy pattern)
-- Different export formats (Factory pattern)
-- Batch processing capabilities
-- Plugin architecture for custom filters
-- GUI wrapper around the core processing engine
-
-### 📚 Related Documentation
-
-- [`../README.md`](../README.md) - User documentation and build instructions
-- [`../CLAUDE.md`](../CLAUDE.md) - Developer guidance for Claude Code
-- Source code in [`../src/`](../src/) and [`../include/`](../include/)
-
----
-
-*Generated for OutlineTool v1.0.0 - A clean, modular approach to image-to-vector conversion*
+- **Image Processing**: OpenCV computer vision library
+- **CAD Export**: LibreCAD's libdxfrw library  
+- **Precision**: Sub-pixel accuracy with corner refinement
+- **Performance**: Optimized for high-resolution photos (typical processing: 10-15 seconds)

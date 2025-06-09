@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OutlineTool VERSION 1.0.0 LANGUAGES CXX)
+project(PrintTrace VERSION 1.0.0 LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -103,7 +103,7 @@ message(STATUS "DXFRW includes: ${DXFRW_INCLUDE_DIR}")
 set(CORE_SOURCES
     src/ImageProcessor.cpp
     src/DXFWriter.cpp
-    src/OutlineToolAPI.cpp
+    src/PrintTraceAPI.cpp
 )
 
 # Executable source files (old monolithic approach)
@@ -113,7 +113,7 @@ set(EXECUTABLE_SOURCES
 
 # CLI tool source files (uses shared library)
 set(CLI_SOURCES
-    src/outlinetool_cli.cpp
+    src/printtrace_cli.cpp
 )
 
 # Build options
@@ -127,10 +127,10 @@ if(BUILD_SHARED_LIB)
     
     # Set library properties
     set_target_properties(${PROJECT_NAME}Lib PROPERTIES
-        OUTPUT_NAME "outlinetool"
+        OUTPUT_NAME "printtrace"
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
-        PUBLIC_HEADER "include/OutlineToolAPI.h"
+        PUBLIC_HEADER "include/PrintTraceAPI.h"
         MACOSX_RPATH TRUE
         INSTALL_RPATH "@loader_path"
     )
@@ -154,7 +154,7 @@ if(BUILD_SHARED_LIB)
     
     # Export symbols for C API
     if(WIN32)
-        target_compile_definitions(${PROJECT_NAME}Lib PRIVATE OUTLINE_TOOL_EXPORTS)
+        target_compile_definitions(${PROJECT_NAME}Lib PRIVATE PRINT_TRACE_EXPORTS)
     endif()
     
     # Installation for library
@@ -174,11 +174,11 @@ if(BUILD_SHARED_LIB)
     
     # Create and install pkg-config file
     configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/outlinetool.pc.in
-        ${CMAKE_CURRENT_BINARY_DIR}/outlinetool.pc
+        ${CMAKE_CURRENT_SOURCE_DIR}/printtrace.pc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/printtrace.pc
         @ONLY
     )
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/outlinetool.pc
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/printtrace.pc
         DESTINATION lib/pkgconfig
     )
 endif()
@@ -214,7 +214,7 @@ if(BUILD_CLI_TOOL AND BUILD_SHARED_LIB)
     
     # Set executable name
     set_target_properties(${PROJECT_NAME}CLI PROPERTIES
-        OUTPUT_NAME "outlinetool"
+        OUTPUT_NAME "printtrace"
     )
     
     # Include directories for CLI tool
@@ -258,12 +258,12 @@ message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ standard: C++${CMAKE_CXX_STANDARD}")
 message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
 if(BUILD_SHARED_LIB)
-    message(STATUS "  Building: Shared library (liboutlinetool.dylib)")
+    message(STATUS "  Building: Shared library (libprinttrace.dylib)")
 endif()
 if(BUILD_CLI_TOOL AND BUILD_SHARED_LIB)
-    message(STATUS "  Building: CLI tool (outlinetool) using shared library")
+    message(STATUS "  Building: CLI tool (printtrace) using shared library")
 endif()
 if(BUILD_EXECUTABLE)
-    message(STATUS "  Building: Monolithic executable (OutlineTool)")
+    message(STATUS "  Building: Monolithic executable (PrintTrace)")
 endif()
 message(STATUS "")

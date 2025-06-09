@@ -1,6 +1,6 @@
-# OutlineTool
+# PrintTrace
 
-A high-performance C++ library for extracting object outlines from images and exporting them as DXF vector files. Designed for easy integration into other applications, with a clean C API perfect for Swift Package Manager integration.
+A high-performance C++ library for extracting object outlines from photos and exporting them as DXF vector files optimized for 3D printing. Designed for easy integration into other applications, with a clean C API perfect for Swift Package Manager integration.
 
 ## Features
 
@@ -33,8 +33,8 @@ A high-performance C++ library for extracting object outlines from images and ex
 brew install cmake opencv git
 
 # Clone with submodules
-git clone --recursive https://github.com/user/OutlineTool.git
-cd OutlineTool
+git clone --recursive https://github.com/user/PrintTrace.git
+cd PrintTrace
 
 # Build library
 make lib
@@ -48,8 +48,8 @@ sudo apt update
 sudo apt install build-essential cmake git libopencv-dev
 
 # Clone with submodules
-git clone --recursive https://github.com/user/OutlineTool.git
-cd OutlineTool
+git clone --recursive https://github.com/user/PrintTrace.git
+cd PrintTrace
 
 # Build library
 make lib
@@ -116,27 +116,32 @@ make
 ### Command-Line Usage
 
 ```bash
-./build/OutlineTool -i input_image.jpg -o output.dxf
+./build/PrintTrace -i input_image.jpg -o output.dxf
 ```
 
 #### Command-Line Options
 
 - `-i, --input` - Input image file path (required)
 - `-o, --output` - Output DXF file path (optional, auto-generated if not specified)
+- `-t, --tolerance <mm>` - Add tolerance/clearance for 3D printing (default: 0.0)
+- `-s, --smooth` - Enable smoothing to remove small details
+- `-d, --debug` - Save debug images showing each processing step
+- `-v, --verbose` - Enable detailed output
 
 #### Examples
 
 ```bash
-# Convert a single image
-./build/OutlineTool -i photo.jpg -o drawing.dxf
+# Basic outline extraction
+printtrace -i photo.jpg
 
-# Auto-generate output filename (creates photo.dxf)
-./build/OutlineTool -i photo.jpg
+# 3D printing case with 1mm clearance
+printtrace -i photo.jpg -t 1.0
 
-# Process multiple files
-for img in *.jpg; do
-  ./build/OutlineTool -i "$img"
-done
+# Smooth outline for easier printing
+printtrace -i photo.jpg -s -t 0.5
+
+# Debug mode to see processing steps
+printtrace -i photo.jpg -d
 ```
 
 ## Library Integration
@@ -144,13 +149,13 @@ done
 ### C/C++ Integration
 
 ```c
-#include <OutlineToolAPI.h>
+#include <PrintTraceAPI.h>
 
 int main() {
-    OutlineToolParams params;
+    PrintTraceParams params;
     outline_tool_get_default_params(&params);
     
-    OutlineToolResult result = outline_tool_process_image_to_dxf(
+    PrintTraceResult result = outline_tool_process_image_to_dxf(
         "input.jpg", 
         "output.dxf", 
         &params, 
@@ -161,7 +166,7 @@ int main() {
 }
 ```
 
-Compile with: `gcc -loutlinetool myapp.c`
+Compile with: `gcc -lprinttrace myapp.c`
 
 ### Swift Package Manager Integration
 
@@ -170,41 +175,49 @@ Create a Swift package that wraps this library:
 ```swift
 // Package.swift
 .systemLibrary(
-    name: "COutlineTool",
-    pkgConfig: "outlinetool",
-    providers: [.brew(["outlinetool"])]
+    name: "CPrintTrace",
+    pkgConfig: "printtrace",
+    providers: [.brew(["printtrace"])]
 )
 ```
 
 ### CMake Integration
 
 ```cmake
-find_package(OutlineTool REQUIRED)
-target_link_libraries(myapp OutlineTool::OutlineToolLib)
+find_package(PrintTrace REQUIRED)
+target_link_libraries(myapp PrintTrace::PrintTraceLib)
 ```
 
 ### pkg-config Integration
 
 ```bash
 # Get compile flags
-pkg-config --cflags outlinetool
+pkg-config --cflags printtrace
 
 # Get link flags  
-pkg-config --libs outlinetool
+pkg-config --libs printtrace
 
 # Use in build
-gcc $(pkg-config --cflags --libs outlinetool) myapp.c
+gcc $(pkg-config --cflags --libs printtrace) myapp.c
 ```
 
 ## How It Works
 
-1. **Image Loading** - Loads and validates the input image
-2. **Preprocessing** - Converts to grayscale and applies binary thresholding
-3. **Boundary Detection** - Finds the largest contour (lightbox/document boundary)
-4. **Perspective Correction** - Warps the image to a normalized square format
-5. **Noise Reduction** - Applies morphological operations and Gaussian blur
-6. **Object Detection** - Identifies the main object contour
-7. **DXF Export** - Converts pixel coordinates to real-world measurements and saves as DXF
+PrintTrace converts photos of objects into precise DXF outlines perfect for 3D printing and CAD applications.
+
+📖 **[See detailed processing pipeline documentation](docs/README.md)**
+
+### Quick Overview
+1. **Lightbox Detection** - Finds the white background square
+2. **Perspective Correction** - Removes camera angle distortion  
+3. **Object Detection** - Extracts the dark object from white background
+4. **3D Printing Optimization** - Optional smoothing and tolerance features
+5. **DXF Export** - Saves as real-world scaled vector file
+
+### Key Features for 3D Printing
+- **Smoothing** (`-s`) - Removes small details that cause print artifacts
+- **Tolerance** (`-t 1.0`) - Adds clearance for proper part fitting
+- **Real-world accuracy** - Calibrated millimeter measurements
 
 ## Input Requirements
 
@@ -267,7 +280,7 @@ cmake --version
 ### Project Structure
 
 ```
-OutlineTool/
+PrintTrace/
 ├── src/                    # Source files
 │   ├── main.cpp           # Main application
 │   ├── ImageProcessor.cpp # Image processing functions
@@ -286,7 +299,7 @@ OutlineTool/
 1. Ensure all dependencies are installed
 2. Clone the repository
 3. Run `make build` or use CMake manually
-4. Executable will be created as `build/OutlineTool`
+4. Executable will be created as `build/PrintTrace`
 
 ## License
 

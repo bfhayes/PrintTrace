@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace OutlineTool {
+namespace PrintTrace {
 
 class DXFWriter : public DRW_Interface {
 private:
@@ -78,4 +78,4 @@ public:
     virtual void writeEntities() override;
 };
 
-} // namespace OutlineTool
+} // namespace PrintTrace

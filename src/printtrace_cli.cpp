@@ -1,4 +1,4 @@
-#include <OutlineToolAPI.h>
+#include <PrintTraceAPI.h>
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -65,8 +65,8 @@ Arguments parseArguments(int argc, char* argv[]) {
 }
 
 void printUsage(const char* progName) {
-    cout << "OutlineTool CLI - Convert image outlines to DXF format\n"
-         << "Using liboutlinetool v" << outline_tool_get_version() << "\n"
+    cout << "PrintTrace CLI - Convert photos to DXF outlines for 3D printing\n"
+         << "Using libprinttrace v" << print_trace_get_version() << "\n"
          << "\n"
          << "Usage: " << progName << " -i <input_image> [-o <output_dxf>] [options]\n"
          << "\n"
@@ -99,7 +99,7 @@ void progressCallback(double progress, const char* stage) {
 }
 
 // Error callback for detailed error reporting
-void errorCallback(OutlineToolResult error_code, const char* error_message) {
+void errorCallback(PrintTraceResult error_code, const char* error_message) {
     cerr << "[ERROR] Code " << error_code << ": " << error_message << endl;
 }
 
@@ -112,12 +112,12 @@ int main(int argc, char* argv[]) {
     }
 
     if (args.verbose) {
-        cout << "[INFO] OutlineTool CLI v" << outline_tool_get_version() << endl;
+        cout << "[INFO] PrintTrace CLI v" << print_trace_get_version() << endl;
         cout << "[INFO] Processing: " << args.inputPath << " -> " << args.outputPath << endl;
     }
 
     // Validate input file
-    if (!outline_tool_is_valid_image_file(args.inputPath.c_str())) {
+    if (!print_trace_is_valid_image_file(args.inputPath.c_str())) {
         cerr << "[ERROR] Input file is not a valid image or does not exist: " << args.inputPath << endl;
         return 1;
     }
@@ -129,8 +129,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Get default parameters
-    OutlineToolParams params;
-    outline_tool_get_default_params(&params);
+    PrintTraceParams params;
+    print_trace_get_default_params(&params);
     
     // Enable debug output if requested
     if (args.debug) {
@@ -152,9 +152,9 @@ int main(int argc, char* argv[]) {
     }
 
     // Validate parameters
-    OutlineToolResult validation_result = outline_tool_validate_params(&params);
-    if (validation_result != OUTLINE_TOOL_SUCCESS) {
-        cerr << "[ERROR] Invalid default parameters: " << outline_tool_get_error_message(validation_result) << endl;
+    PrintTraceResult validation_result = print_trace_validate_params(&params);
+    if (validation_result != PRINT_TRACE_SUCCESS) {
+        cerr << "[ERROR] Invalid default parameters: " << print_trace_get_error_message(validation_result) << endl;
         return 1;
     }
 
@@ -175,14 +175,14 @@ int main(int argc, char* argv[]) {
         }
         cout << endl;
         
-        double estimated_time = outline_tool_estimate_processing_time(args.inputPath.c_str());
+        double estimated_time = print_trace_estimate_processing_time(args.inputPath.c_str());
         if (estimated_time > 0) {
             cout << "  Estimated time: " << (int)estimated_time << "s" << endl;
         }
     }
 
     // Process image to DXF
-    OutlineToolResult result = outline_tool_process_image_to_dxf(
+    PrintTraceResult result = print_trace_process_image_to_dxf(
         args.inputPath.c_str(),
         args.outputPath.c_str(),
         &params,
@@ -190,12 +190,12 @@ int main(int argc, char* argv[]) {
         args.verbose ? errorCallback : nullptr
     );
 
-    if (result == OUTLINE_TOOL_SUCCESS) {
+    if (result == PRINT_TRACE_SUCCESS) {
         cout << "[SUCCESS] Conversion completed successfully!" << endl;
         cout << "[INFO] Output saved to: " << args.outputPath << endl;
         return 0;
     } else {
-        const char* error_msg = outline_tool_get_error_message(result);
+        const char* error_msg = print_trace_get_error_message(result);
         cerr << "[ERROR] Processing failed: " << error_msg << endl;
         return 1;
     }

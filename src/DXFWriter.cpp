@@ -2,7 +2,7 @@
 #include <iostream>
 #include <memory>
 
-namespace OutlineTool {
+namespace PrintTrace {
 
 DXFWriter::DXFWriter(dxfRW& dxfWriter, double pixelsPerMM) 
     : m_dxfWriter(dxfWriter), m_pixelsPerMM(pixelsPerMM) {
@@ -63,4 +63,4 @@ bool DXFWriter::saveContourAsDXF(const std::vector<cv::Point>& contour,
     }
 }
 
-} // namespace OutlineTool
+} // namespace PrintTrace
