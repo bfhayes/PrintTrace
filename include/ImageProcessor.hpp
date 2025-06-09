@@ -60,6 +60,7 @@ public:
         // Smoothing for 3D printing
         bool enableSmoothing = false;    // Enable smoothing for easier 3D printing
         double smoothingAmountMM = 0.2;  // Smoothing amount in millimeters (removes details smaller than this)
+        int smoothingMode = 1;           // 0=morphological (old), 1=curvature-based (new)
         
         // Debug visualization
         bool enableDebugOutput = false;
@@ -99,6 +100,12 @@ public:
     static std::vector<cv::Point> smoothContour(const std::vector<cv::Point>& contour,
                                                 double smoothingMM, double pixelsPerMM,
                                                 const ProcessingParams& params);
+    static std::vector<cv::Point> smoothContourMorphological(const std::vector<cv::Point>& contour,
+                                                             double smoothingMM, double pixelsPerMM,
+                                                             const ProcessingParams& params);
+    static std::vector<cv::Point> smoothContourCurvatureBased(const std::vector<cv::Point>& contour,
+                                                              double smoothingMM, double pixelsPerMM,
+                                                              const ProcessingParams& params);
     static bool validateContour(const std::vector<cv::Point>& contour, const ProcessingParams& params);
     
     // Debug visualization methods

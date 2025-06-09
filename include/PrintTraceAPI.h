@@ -80,6 +80,7 @@ typedef struct {
     // Smoothing for 3D printing
     bool enable_smoothing;          // Enable smoothing for easier 3D printing (default: false)
     double smoothing_amount_mm;     // Smoothing amount in millimeters (range: 0.1-2.0, default: 0.2)
+    int32_t smoothing_mode;         // Smoothing algorithm: 0=morphological, 1=curvature-based (default: 1)
     
     // Debug visualization
     bool enable_debug_output;       // Enable debug image output (default: false)
@@ -145,6 +146,8 @@ typedef struct {
     double dilation_amount_mm_max;  // 10.0
     double smoothing_amount_mm_min; // 0.1
     double smoothing_amount_mm_max; // 2.0
+    int32_t smoothing_mode_min;     // 0 (morphological)
+    int32_t smoothing_mode_max;     // 1 (curvature-based)
 } PrintTraceParamRanges;
 
 // Point structure for contour data

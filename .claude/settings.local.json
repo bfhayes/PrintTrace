@@ -15,7 +15,13 @@
       "Bash(/opt/homebrew/bin/rg -i \"outlinetool\" --type-not git --no-heading --line-number)",
       "Bash(/opt/homebrew/bin/rg -i \"outlinetool\" --no-heading --line-number)",
       "Bash(cmake:*)",
-      "Bash(./PrintTrace --help)"
+      "Bash(./PrintTrace --help)",
+      "Bash(./build/printtrace:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(rg:*)",
+      "Bash(./build/PrintTrace:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

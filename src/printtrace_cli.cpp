@@ -15,6 +15,7 @@ struct Arguments {
     double dilationMM = 0.0;
     bool enableSmoothing = false;
     double smoothingMM = 0.2;
+    int smoothingMode = 1;             // Default to curvature-based
     
     // Object detection parameters
     bool useAdaptiveThreshold = false;
@@ -54,6 +55,8 @@ Arguments parseArguments(int argc, char* argv[]) {
         } else if ((arg == "--smooth-amount") && (i + 1 < argc)) {
             args.smoothingMM = stod(argv[++i]);
             args.enableSmoothing = true; // Auto-enable when amount is specified
+        } else if ((arg == "--smooth-mode") && (i + 1 < argc)) {
+            args.smoothingMode = stoi(argv[++i]);
         } else if (arg == "--adaptive-threshold") {
             args.useAdaptiveThreshold = true;
         } else if ((arg == "--manual-threshold") && (i + 1 < argc)) {
@@ -105,6 +108,7 @@ void printUsage(const char* progName) {
          << "  -t, --tolerance <mm>  Add tolerance/clearance in millimeters for 3D printing (default: 0.0)\n"
          << "  -s, --smooth  Enable smoothing to remove small details for easier 3D printing\n"
          << "  --smooth-amount <mm>  Smoothing amount in millimeters (default: 0.2, enables smoothing)\n"
+         << "  --smooth-mode <0|1>  Smoothing algorithm: 0=morphological (legacy), 1=curvature-based (default)\n"
          << "\n"
          << "Object Detection:\n"
          << "  --adaptive-threshold  Use adaptive thresholding instead of Otsu (better for uneven lighting)\n"
@@ -126,6 +130,8 @@ void printUsage(const char* progName) {
          << "  " << progName << " -i photo.jpg -t 0.5  # Add 0.5mm tolerance for 3D printing\n"
          << "  " << progName << " -i photo.jpg -s      # Enable smoothing for easier printing\n"
          << "  " << progName << " -i photo.jpg -s -t 1.0  # Smooth + 1mm tolerance\n"
+         << "  " << progName << " -i photo.jpg -s --smooth-mode 0  # Use legacy morphological smoothing\n"
+         << "  " << progName << " -i photo.jpg -s --smooth-mode 1  # Use curvature-based smoothing (default)\n"
          << "  " << progName << " -i photo.jpg --threshold-offset -15  # More inclusive thresholding\n"
          << "  " << progName << " -i photo.jpg --manual-threshold 120  # Use specific threshold value\n"
          << "  " << progName << " -i photo.jpg --adaptive-threshold    # Better for uneven lighting\n"
@@ -193,7 +199,9 @@ int main(int argc, char* argv[]) {
     if (args.enableSmoothing) {
         params.enable_smoothing = true;
         params.smoothing_amount_mm = args.smoothingMM;
-        cout << "[INFO] 3D printing smoothing enabled: " << args.smoothingMM << "mm" << endl;
+        params.smoothing_mode = args.smoothingMode;
+        cout << "[INFO] 3D printing smoothing enabled: " << args.smoothingMM << "mm using " 
+             << (args.smoothingMode == 0 ? "morphological" : "curvature-based") << " method" << endl;
     }
     
     // Set object detection parameters if requested

@@ -5,6 +5,9 @@
         "algorithm": "cpp",
         "fstream": "cpp",
         "cstdlib": "cpp",
-        "memory": "cpp"
+        "memory": "cpp",
+        "exception": "cpp",
+        "stdexcept": "cpp",
+        "cstring": "cpp"
     }
 }

@@ -55,6 +55,7 @@ namespace {
             
             cpp_params.enableSmoothing = params->enable_smoothing;
             cpp_params.smoothingAmountMM = params->smoothing_amount_mm;
+            cpp_params.smoothingMode = params->smoothing_mode;
             
             cpp_params.enableDebugOutput = params->enable_debug_output;
         }
@@ -203,6 +204,7 @@ void print_trace_get_default_params(PrintTraceParams* params) {
     // Smoothing settings
     params->enable_smoothing = false;
     params->smoothing_amount_mm = 0.2;
+    params->smoothing_mode = 1;  // Default to curvature-based smoothing
     
     // Debug settings
     params->enable_debug_output = false;
@@ -271,6 +273,8 @@ void print_trace_get_param_ranges(PrintTraceParamRanges* ranges) {
     ranges->dilation_amount_mm_max = 10.0;
     ranges->smoothing_amount_mm_min = 0.1;
     ranges->smoothing_amount_mm_max = 2.0;
+    ranges->smoothing_mode_min = 0;
+    ranges->smoothing_mode_max = 1;
 }
 
 PrintTraceResult print_trace_validate_params(const PrintTraceParams* params) {
@@ -393,6 +397,11 @@ PrintTraceResult print_trace_validate_params(const PrintTraceParams* params) {
     // Smoothing parameters
     if (params->smoothing_amount_mm < ranges.smoothing_amount_mm_min || 
         params->smoothing_amount_mm > ranges.smoothing_amount_mm_max) {
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
+    }
+    
+    if (params->smoothing_mode < ranges.smoothing_mode_min || 
+        params->smoothing_mode > ranges.smoothing_mode_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     

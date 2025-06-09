@@ -149,8 +149,14 @@ printtrace -i photo.jpg
 # 3D printing case with 1mm clearance
 printtrace -i photo.jpg -t 1.0
 
-# Smooth outline for easier printing
+# Smooth outline for easier printing (new curvature-based method)
 printtrace -i photo.jpg -s -t 0.5
+
+# Use legacy morphological smoothing (affects entire shape)
+printtrace -i photo.jpg -s --smooth-mode 0
+
+# Use new curvature-based smoothing (preserves detail better)
+printtrace -i photo.jpg -s --smooth-mode 1
 
 # Debug mode to see processing steps
 printtrace -i photo.jpg -d
@@ -282,8 +288,10 @@ PrintTrace converts photos of objects into precise DXF outlines perfect for 3D p
 5. **DXF Export** - Saves as real-world scaled vector file
 
 ### Key Features for 3D Printing
-- **Smoothing** (`-s`) - Removes small details that cause print artifacts
-- **Tolerance** (`-t 1.0`) - Adds clearance for proper part fitting
+- **Smart Smoothing** (`-s`) - Two algorithms available:
+  - **Curvature-based** (default): Smooths only sharp corners and kinks while preserving overall shape detail
+  - **Morphological** (legacy): Traditional approach that affects the entire shape
+- **Tolerance** (`-t 1.0`) - Adds clearance for proper part fitting  
 - **Real-world accuracy** - Calibrated millimeter measurements
 
 ## Input Requirements

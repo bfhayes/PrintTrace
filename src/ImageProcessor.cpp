@@ -2,6 +2,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
+#include <cmath>
 
 using namespace cv;
 using namespace std;
@@ -429,7 +430,124 @@ vector<Point> ImageProcessor::smoothContour(const vector<Point>& contour,
         return contour;
     }
     
-    cout << "[INFO] Smoothing contour by " << smoothingMM << "mm for easier 3D printing" << endl;
+    cout << "[INFO] Smoothing contour by " << smoothingMM << "mm using " 
+         << (params.smoothingMode == 0 ? "morphological" : "curvature-based") 
+         << " method for easier 3D printing" << endl;
+    
+    if (params.smoothingMode == 0) {
+        return smoothContourMorphological(contour, smoothingMM, pixelsPerMM, params);
+    } else {
+        return smoothContourCurvatureBased(contour, smoothingMM, pixelsPerMM, params);
+    }
+}
+
+// New curvature-based smoothing method (default)
+vector<Point> ImageProcessor::smoothContourCurvatureBased(const vector<Point>& contour,
+                                                         double smoothingMM, double pixelsPerMM,
+                                                         const ProcessingParams& params) {
+    cout << "[INFO] Using curvature-based smoothing (preserves detail better)" << endl;
+    
+    // Convert smoothing from mm to pixels
+    double smoothingPixels = smoothingMM * pixelsPerMM;
+    cout << "[INFO] Smoothing in pixels: " << smoothingPixels << endl;
+    
+    // Method 1: Douglas-Peucker simplification to remove unnecessary points
+    // This removes points that don't contribute significantly to the shape
+    vector<Point> simplified;
+    double epsilon = smoothingPixels * 0.5; // Simplification tolerance
+    approxPolyDP(contour, simplified, epsilon, true);
+    cout << "[INFO] Simplified from " << contour.size() << " to " << simplified.size() << " points" << endl;
+    
+    // Method 2: Local weighted averaging for smoothing sharp corners
+    // This smooths kinks while preserving overall shape
+    vector<Point> smoothed;
+    int windowSize = static_cast<int>(smoothingPixels) | 1; // Make odd
+    if (windowSize < 3) windowSize = 3;
+    int halfWindow = windowSize / 2;
+    
+    for (size_t i = 0; i < simplified.size(); i++) {
+        // Calculate local curvature to determine smoothing strength
+        Point prev = simplified[(i - 1 + simplified.size()) % simplified.size()];
+        Point curr = simplified[i];
+        Point next = simplified[(i + 1) % simplified.size()];
+        
+        // Compute angle at current point
+        Point v1 = prev - curr;
+        Point v2 = next - curr;
+        double angle = acos(v1.dot(v2) / (norm(v1) * norm(v2) + 1e-6));
+        
+        // Only smooth sharp corners (angle < 150 degrees)
+        if (angle < CV_PI * 5.0 / 6.0) {
+            // Weighted average of nearby points
+            Point2f avgPoint(0, 0);
+            float totalWeight = 0;
+            
+            for (int j = -halfWindow; j <= halfWindow; j++) {
+                int idx = (i + j + simplified.size()) % simplified.size();
+                float weight = 1.0f / (1.0f + abs(j)); // Distance-based weight
+                avgPoint.x += simplified[idx].x * weight;
+                avgPoint.y += simplified[idx].y * weight;
+                totalWeight += weight;
+            }
+            
+            avgPoint.x /= totalWeight;
+            avgPoint.y /= totalWeight;
+            
+            // Blend based on curvature (sharper corners get more smoothing)
+            float blendFactor = static_cast<float>((CV_PI - angle) / CV_PI);
+            blendFactor = pow(blendFactor, 2.0f); // Non-linear blending
+            
+            Point smoothedPt;
+            smoothedPt.x = static_cast<int>(curr.x * (1 - blendFactor) + avgPoint.x * blendFactor);
+            smoothedPt.y = static_cast<int>(curr.y * (1 - blendFactor) + avgPoint.y * blendFactor);
+            smoothed.push_back(smoothedPt);
+        } else {
+            // Keep straight sections unchanged
+            smoothed.push_back(curr);
+        }
+    }
+    
+    // Method 3: Optional final polygon approximation for cleaner result
+    vector<Point> finalContour;
+    double finalEpsilon = smoothingPixels * 0.2; // Gentle final approximation
+    approxPolyDP(smoothed, finalContour, finalEpsilon, true);
+    
+    // Debug visualization
+    if (params.enableDebugOutput) {
+        // Create visualization showing original vs smoothed
+        Rect boundingRect = cv::boundingRect(contour);
+        int padding = 20;
+        Size imageSize(boundingRect.width + 2 * padding, boundingRect.height + 2 * padding);
+        Point offset(-boundingRect.x + padding, -boundingRect.y + padding);
+        
+        Mat vis = Mat::zeros(imageSize, CV_8UC3);
+        
+        // Draw original in red
+        vector<Point> origVis;
+        for (const Point& pt : contour) {
+            origVis.push_back(Point(pt.x + offset.x, pt.y + offset.y));
+        }
+        polylines(vis, vector<vector<Point>>{origVis}, true, Scalar(0, 0, 255), 2);
+        
+        // Draw smoothed in green
+        vector<Point> smoothVis;
+        for (const Point& pt : finalContour) {
+            smoothVis.push_back(Point(pt.x + offset.x, pt.y + offset.y));
+        }
+        polylines(vis, vector<vector<Point>>{smoothVis}, true, Scalar(0, 255, 0), 2);
+        
+        saveDebugImage(vis, "10_smoothing_comparison.jpg", params);
+    }
+    
+    cout << "[INFO] Curvature-based smoothing complete. Original: " << contour.size() << " points, Smoothed: " << finalContour.size() << " points" << endl;
+    return finalContour;
+}
+
+// Legacy morphological smoothing method
+vector<Point> ImageProcessor::smoothContourMorphological(const vector<Point>& contour,
+                                                        double smoothingMM, double pixelsPerMM,
+                                                        const ProcessingParams& params) {
+    cout << "[INFO] Using morphological smoothing (legacy method, affects entire shape)" << endl;
     
     // Convert smoothing from mm to pixels
     double smoothingPixels = smoothingMM * pixelsPerMM;
@@ -456,7 +574,7 @@ vector<Point> ImageProcessor::smoothContour(const vector<Point>& contour,
     vector<vector<Point>> contourVec = {adjustedContour};
     fillPoly(mask, contourVec, Scalar(255));
     
-    saveDebugImage(mask, "10a_smooth_mask.jpg", params);
+    saveDebugImage(mask, "10a_morph_smooth_mask.jpg", params);
     
     // Apply morphological operations for smoothing
     int kernelSize = static_cast<int>(smoothingPixels * 2 + 1);
@@ -471,14 +589,14 @@ vector<Point> ImageProcessor::smoothContour(const vector<Point>& contour,
     // Apply opening (erosion followed by dilation) to smooth out small protrusions
     morphologyEx(smoothed, smoothed, MORPH_OPEN, kernel);
     
-    saveDebugImage(smoothed, "10b_smoothed_mask.jpg", params);
+    saveDebugImage(smoothed, "10b_morph_smoothed_mask.jpg", params);
     
     // Extract the smoothed contour
     vector<vector<Point>> smoothedContours;
     findContours(smoothed, smoothedContours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
     
     if (smoothedContours.empty()) {
-        cout << "[WARN] No contours found after smoothing, returning original" << endl;
+        cout << "[WARN] No contours found after morphological smoothing, returning original" << endl;
         return contour;
     }
     
@@ -504,7 +622,7 @@ vector<Point> ImageProcessor::smoothContour(const vector<Point>& contour,
         finalContour.push_back(Point(pt.x - offset.x, pt.y - offset.y));
     }
     
-    cout << "[INFO] Smoothing complete. Original: " << contour.size() << " points, Smoothed: " << finalContour.size() << " points" << endl;
+    cout << "[INFO] Morphological smoothing complete. Original: " << contour.size() << " points, Smoothed: " << finalContour.size() << " points" << endl;
     return finalContour;
 }
 
