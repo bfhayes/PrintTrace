@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # OutlineTool Dependency Installation Script
-# This script helps install libdxfrw which is required for DXF export
+# This script installs the minimal dependencies needed for OutlineTool
+# Note: libdxfrw is now included as a submodule and built automatically
 
 set -e
 
@@ -45,43 +46,15 @@ else
     exit 1
 fi
 
-# Install libdxfrw from source
-echo ""
-echo "Installing libdxfrw from source..."
-
-# Create temporary directory
-TEMP_DIR=$(mktemp -d)
-cd "$TEMP_DIR"
-
-# Clone the repository
-echo "Cloning libdxfrw..."
-git clone https://github.com/aewallin/libdxfrw.git
-cd libdxfrw
-
-# Build and install
-echo "Building libdxfrw..."
-mkdir -p build
-cd build
-cmake ..
-make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-
-echo "Installing libdxfrw..."
-sudo make install
-
-# Update library cache on Linux
-if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    sudo ldconfig
-fi
-
-# Clean up
-cd /
-rm -rf "$TEMP_DIR"
-
 echo ""
 echo "✓ Dependencies installed successfully!"
 echo ""
-echo "You can now build OutlineTool with:"
-echo "  make build"
+echo "libdxfrw is included as a submodule and will be built automatically."
 echo ""
-echo "If you encounter any issues, you may need to specify library paths:"
-echo "  cmake -DDXFRW_LIBRARY=/usr/local/lib/libdxfrw.so -DDXFRW_INCLUDE_DIR=/usr/local/include"
+echo "Next steps:"
+echo "  1. Clone the repository with submodules:"
+echo "     git clone --recursive https://github.com/user/OutlineTool.git"
+echo "  2. Build the library:"
+echo "     cd OutlineTool && make lib"
+echo "  3. Or if you already have the repo:"
+echo "     git submodule update --init --recursive && make lib"

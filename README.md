@@ -1,14 +1,17 @@
 # OutlineTool
 
-A C++ application that processes images to extract object outlines and exports them as DXF vector files. Perfect for converting photographed objects into CAD-compatible vector formats.
+A high-performance C++ library for extracting object outlines from images and exporting them as DXF vector files. Designed for easy integration into other applications, with a clean C API perfect for Swift Package Manager integration.
 
 ## Features
 
-- **Automatic perspective correction** - Detects document/lightbox boundaries and corrects perspective
-- **Noise reduction** - Advanced image processing to clean up contours
-- **Real-world scaling** - Converts pixel coordinates to accurate millimeter measurements
-- **DXF export** - Creates industry-standard DXF files compatible with CAD software
-- **Command-line interface** - Simple and efficient batch processing
+- **High-performance C++ core** - Optimized image processing algorithms
+- **Clean C API** - Perfect for Swift, Python, and other language bindings
+- **Automatic perspective correction** - Detects document/lightbox boundaries
+- **Advanced noise reduction** - Morphological operations and Gaussian filtering
+- **Real-world scaling** - Accurate pixel-to-millimeter conversion
+- **DXF export** - Industry-standard CAD-compatible vector format
+- **Easy integration** - pkg-config, CMake, and Swift Package Manager support
+- **Cross-platform** - Works on macOS, Linux, and Windows
 
 ## Prerequisites
 
@@ -17,22 +20,11 @@ A C++ application that processes images to extract object outlines and exports t
 - **CMake** (>= 3.16)
 - **C++ Compiler** with C++17 support (GCC, Clang, or MSVC)
 - **OpenCV** (>= 4.0) with core, imgproc, and imgcodecs modules
-- **libdxfrw** - DXF reading/writing library
+- **Git** (for submodule support)
 
-### Quick Installation (Recommended)
+**Note**: libdxfrw is now included as a submodule and built automatically - no manual installation required!
 
-Run the automated dependency installer:
-
-```bash
-./install-deps.sh
-```
-
-This script will:
-- Install OpenCV and build tools via your package manager
-- Build and install libdxfrw from source
-- Configure everything automatically
-
-### Manual Installation
+### Quick Installation
 
 #### macOS (with Homebrew)
 
@@ -40,16 +32,12 @@ This script will:
 # Install dependencies
 brew install cmake opencv git
 
-# Build and install libdxfrw from source
-git clone https://github.com/aewallin/libdxfrw.git
-cd libdxfrw
-mkdir build && cd build
-cmake .. && make
-sudo make install
-cd ../..
+# Clone with submodules
+git clone --recursive https://github.com/user/OutlineTool.git
+cd OutlineTool
 
-# Build OutlineTool
-make build
+# Build library
+make lib
 ```
 
 #### Ubuntu/Debian
@@ -59,17 +47,21 @@ make build
 sudo apt update
 sudo apt install build-essential cmake git libopencv-dev
 
-# Build and install libdxfrw from source
-git clone https://github.com/aewallin/libdxfrw.git
-cd libdxfrw
-mkdir build && cd build
-cmake .. && make
-sudo make install
-sudo ldconfig
-cd ../..
+# Clone with submodules
+git clone --recursive https://github.com/user/OutlineTool.git
+cd OutlineTool
 
-# Build OutlineTool
-make build
+# Build library
+make lib
+```
+
+### Existing Repository Setup
+
+If you already have the repository cloned, initialize the submodule:
+
+```bash
+git submodule update --init --recursive
+make lib
 ```
 
 ## Building
@@ -147,46 +139,62 @@ for img in *.jpg; do
 done
 ```
 
-### Swift/iOS/macOS Integration
+## Library Integration
 
-OutlineTool provides a C API that can be easily integrated into Swift applications:
+### C/C++ Integration
 
-```bash
-# Build shared library for Swift integration
-make dylib
-```
+```c
+#include <OutlineToolAPI.h>
 
-This creates `build/liboutlinetool.dylib` which can be used in Xcode projects.
-
-#### Swift API Example
-
-```swift
-import SwiftUI
-
-struct ContentView: View {
-    @StateObject private var outlineTool = OutlineTool()
+int main() {
+    OutlineToolParams params;
+    outline_tool_get_default_params(&params);
     
-    var body: some View {
-        VStack {
-            if outlineTool.isProcessing {
-                ProgressView(value: outlineTool.progress)
-                Text(outlineTool.currentStage)
-            }
-            
-            Button("Process Image") {
-                Task {
-                    try await outlineTool.processImageToDXF(
-                        imagePath: "/path/to/image.jpg",
-                        outputPath: "/path/to/output.dxf"
-                    )
-                }
-            }
-        }
-    }
+    OutlineToolResult result = outline_tool_process_image_to_dxf(
+        "input.jpg", 
+        "output.dxf", 
+        &params, 
+        NULL, NULL
+    );
+    
+    return (result == OUTLINE_TOOL_SUCCESS) ? 0 : 1;
 }
 ```
 
-See [`swift-example/`](swift-example/) for complete SwiftUI integration examples.
+Compile with: `gcc -loutlinetool myapp.c`
+
+### Swift Package Manager Integration
+
+Create a Swift package that wraps this library:
+
+```swift
+// Package.swift
+.systemLibrary(
+    name: "COutlineTool",
+    pkgConfig: "outlinetool",
+    providers: [.brew(["outlinetool"])]
+)
+```
+
+### CMake Integration
+
+```cmake
+find_package(OutlineTool REQUIRED)
+target_link_libraries(myapp OutlineTool::OutlineToolLib)
+```
+
+### pkg-config Integration
+
+```bash
+# Get compile flags
+pkg-config --cflags outlinetool
+
+# Get link flags  
+pkg-config --libs outlinetool
+
+# Use in build
+gcc $(pkg-config --cflags --libs outlinetool) myapp.c
+```
 
 ## How It Works
 
@@ -225,14 +233,17 @@ export OpenCV_DIR=/opt/homebrew/lib/cmake/opencv4
 sudo apt install libopencv-dev
 ```
 
-**libdxfrw not found:**
+**Submodule not initialized:**
 ```bash
-# Build from source if not available in package manager
-git clone https://github.com/aewallin/libdxfrw
-cd libdxfrw
-mkdir build && cd build
-cmake .. && make
-sudo make install
+# Initialize the libdxfrw submodule
+git submodule update --init --recursive
+```
+
+**CMake version errors:**
+```bash
+# Ensure you have CMake 3.16 or newer
+cmake --version
+# Update if needed via package manager
 ```
 
 ### Processing Issues

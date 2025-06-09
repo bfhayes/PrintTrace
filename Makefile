@@ -1,10 +1,10 @@
 # OutlineTool Makefile
 # Simple wrapper around CMake for easier building
 
-.PHONY: all build clean install debug release test help lib dylib executable
+.PHONY: all build clean install debug release test help lib dylib cli tool executable install-lib
 
 # Default target
-all: build
+all: lib
 
 # Build the project (Release mode by default)
 build:
@@ -42,21 +42,38 @@ install: build
 	@cd build && make install
 	@echo "Installation complete."
 
-# Build shared library only
+# Build shared library only (primary target)
 lib dylib:
 	@echo "Building OutlineTool shared library..."
 	@mkdir -p build
 	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXECUTABLE=OFF -DBUILD_SHARED_LIB=ON
 	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-	@echo "Shared library complete! Library: build/liboutlinetool.dylib"
+	@echo "✅ Shared library complete! Library: build/liboutlinetool.dylib"
+	@echo "📋 Header available at: include/OutlineToolAPI.h"
 
-# Build executable only
-executable:
-	@echo "Building OutlineTool executable..."
+# Install library to system (requires sudo)
+install-lib: lib
+	@echo "Installing OutlineTool library to system..."
+	@cd build && sudo make install
+	@echo "✅ Library installed! Now available via pkg-config:"
+	@echo "   pkg-config --cflags --libs outlinetool"
+
+# Build CLI tool (uses shared library)
+cli tool:
+	@echo "Building OutlineTool CLI tool..."
 	@mkdir -p build
-	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXECUTABLE=ON -DBUILD_SHARED_LIB=OFF
+	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_CLI_TOOL=ON -DBUILD_SHARED_LIB=ON -DBUILD_EXECUTABLE=OFF
 	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-	@echo "Executable complete! Binary: build/OutlineTool"
+	@echo "✅ CLI tool complete! Binary: build/outlinetool"
+	@echo "📋 Uses shared library: build/liboutlinetool.dylib"
+
+# Build executable only (monolithic)
+executable:
+	@echo "Building OutlineTool executable (monolithic)..."
+	@mkdir -p build
+	@cd build && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXECUTABLE=ON -DBUILD_SHARED_LIB=OFF -DBUILD_CLI_TOOL=OFF
+	@cd build && make -j$(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+	@echo "✅ Executable complete! Binary: build/OutlineTool"
 
 # Test build (build and run basic test)
 test: build
@@ -88,27 +105,33 @@ help:
 	@echo "OutlineTool Build System"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  all         - Build both executable and library (default)"
-	@echo "  build       - Build both executable and library (Release mode)"
-	@echo "  lib/dylib   - Build shared library only"
-	@echo "  executable  - Build command-line executable only"
+	@echo "  all         - Build shared library (default)"
+	@echo "  lib/dylib   - Build shared library for Swift/C integration"
+	@echo "  cli/tool    - Build CLI tool that uses shared library"
+	@echo "  executable  - Build monolithic executable (all-in-one)"
+	@echo "  install-lib - Install library to system (requires sudo)"
+	@echo "  build       - Build both executable and library"
 	@echo "  debug       - Build in Debug mode"
 	@echo "  release     - Build in Release mode (explicit)"
 	@echo "  clean       - Remove build directory"
-	@echo "  install     - Install the built executable and library"
-	@echo "  test        - Build and test both executable and library"
+	@echo "  install     - Install everything to system"
+	@echo "  test        - Build and test library"
 	@echo "  configure   - Show example configuration commands"
 	@echo "  help        - Show this help message"
 	@echo ""
 	@echo "Dependencies:"
 	@echo "  - OpenCV (core, imgproc, imgcodecs)"
-	@echo "  - libdxfrw"
+	@echo "  - libdxfrw (included as submodule)"
 	@echo ""
 	@echo "Usage examples:"
-	@echo "  make build                    # Build both executable and library"
-	@echo "  make dylib                    # Build only shared library for Swift"
-	@echo "  ./build/OutlineTool -i input.jpg -o output.dxf"
+	@echo "  make lib                      # Build shared library (default)"
+	@echo "  make cli                      # Build CLI tool using shared library"
+	@echo "  make install-lib              # Install library system-wide"
+	@echo "  make executable               # Build standalone executable"
+	@echo "  ./build/outlinetool -i input.jpg -o output.dxf"
 	@echo ""
-	@echo "Swift Integration:"
-	@echo "  make dylib                    # Creates build/liboutlinetool.dylib"
-	@echo "  # Use build/liboutlinetool.dylib in your Xcode project"
+	@echo "Library Integration:"
+	@echo "  C/C++:   gcc -loutlinetool myapp.c"
+	@echo "  Swift:   Use in Swift Package Manager (see docs)"
+	@echo "  CMake:   find_package(OutlineTool REQUIRED)"
+	@echo "  pkg-config: pkg-config --cflags --libs outlinetool"

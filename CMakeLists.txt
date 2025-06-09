@@ -20,49 +20,83 @@ if(NOT OpenCV_FOUND)
     message(FATAL_ERROR "OpenCV not found. Please install OpenCV or set OpenCV_DIR.")
 endif()
 
-# Find libdxfrw
-find_library(DXFRW_LIBRARY
-    NAMES dxfrw libdxfrw
-    PATHS
-        /usr/local/lib
-        /usr/lib
-        /opt/homebrew/lib
-        ${CMAKE_PREFIX_PATH}/lib
-    DOC "Path to the dxfrw library"
-)
-
-find_path(DXFRW_INCLUDE_DIR
-    NAMES libdxfrw.h drw_interface.h
-    PATHS
-        /usr/local/include/libdxfrw
-        /usr/include/libdxfrw
-        /opt/homebrew/include/libdxfrw
-        ${CMAKE_PREFIX_PATH}/include/libdxfrw
-        /usr/local/include
-        /usr/include
-        /opt/homebrew/include
-        ${CMAKE_PREFIX_PATH}/include
-    DOC "Path to the dxfrw headers"
-)
-
-if(NOT DXFRW_LIBRARY)
-    message(FATAL_ERROR 
-        "libdxfrw library not found. Please install libdxfrw or set:\n"
-        "  -DDXFRW_LIBRARY=/path/to/libdxfrw.so\n"
-        "  -DDXFRW_INCLUDE_DIR=/path/to/dxfrw/headers")
-endif()
-
-if(NOT DXFRW_INCLUDE_DIR)
-    message(FATAL_ERROR 
-        "libdxfrw headers not found. Please install libdxfrw or set:\n"
-        "  -DDXFRW_INCLUDE_DIR=/path/to/dxfrw/headers")
+# Build libdxfrw as static library from submodule
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libdxfrw/CMakeLists.txt")
+    message(STATUS "Building libdxfrw from submodule")
+    
+    # Configure libdxfrw to build as static library
+    set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    
+    # Disable building dwg2dxf tool from libdxfrw
+    set(BUILD_DWG2DXF OFF CACHE BOOL "" FORCE)
+    
+    # Add libdxfrw subdirectory
+    add_subdirectory(third_party/libdxfrw EXCLUDE_FROM_ALL)
+    
+    # Restore BUILD_SHARED_LIBS setting
+    set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED} CACHE BOOL "" FORCE)
+    
+    # Set variables for linking
+    set(DXFRW_LIBRARY dxfrw)
+    set(DXFRW_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libdxfrw/src")
+    
+else()
+    # Fallback to system-installed libdxfrw if submodule not available
+    message(STATUS "Submodule not found, looking for system libdxfrw")
+    
+    find_library(DXFRW_LIBRARY
+        NAMES dxfrw libdxfrw
+        PATHS
+            /usr/local/lib
+            /usr/lib
+            /opt/homebrew/lib
+            ${CMAKE_PREFIX_PATH}/lib
+        DOC "Path to the dxfrw library"
+    )
+    
+    find_path(DXFRW_INCLUDE_DIR
+        NAMES libdxfrw.h drw_interface.h
+        PATHS
+            /usr/local/include/libdxfrw
+            /usr/include/libdxfrw
+            /opt/homebrew/include/libdxfrw
+            ${CMAKE_PREFIX_PATH}/include/libdxfrw
+            /usr/local/include
+            /usr/include
+            /opt/homebrew/include
+            ${CMAKE_PREFIX_PATH}/include
+        DOC "Path to the dxfrw headers"
+    )
+    
+    if(NOT DXFRW_LIBRARY)
+        message(FATAL_ERROR 
+            "libdxfrw not found. Please:\n"
+            "  1. Initialize submodule: git submodule update --init --recursive\n"
+            "  OR\n"
+            "  2. Install libdxfrw system-wide and set:\n"
+            "     -DDXFRW_LIBRARY=/path/to/libdxfrw.so\n"
+            "     -DDXFRW_INCLUDE_DIR=/path/to/dxfrw/headers")
+    endif()
+    
+    if(NOT DXFRW_INCLUDE_DIR)
+        message(FATAL_ERROR 
+            "libdxfrw headers not found. Please:\n"
+            "  1. Initialize submodule: git submodule update --init --recursive\n"
+            "  OR\n"
+            "  2. Set: -DDXFRW_INCLUDE_DIR=/path/to/dxfrw/headers")
+    endif()
 endif()
 
 # Status messages
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "OpenCV version: ${OpenCV_VERSION}")
 message(STATUS "OpenCV includes: ${OpenCV_INCLUDE_DIRS}")
-message(STATUS "DXFRW library: ${DXFRW_LIBRARY}")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libdxfrw/CMakeLists.txt")
+    message(STATUS "DXFRW: Building from submodule (static)")
+else()
+    message(STATUS "DXFRW library: ${DXFRW_LIBRARY}")
+endif()
 message(STATUS "DXFRW includes: ${DXFRW_INCLUDE_DIR}")
 
 # Core library source files (shared between executable and library)
@@ -72,14 +106,20 @@ set(CORE_SOURCES
     src/OutlineToolAPI.cpp
 )
 
-# Executable source files
+# Executable source files (old monolithic approach)
 set(EXECUTABLE_SOURCES
     src/main.cpp
+)
+
+# CLI tool source files (uses shared library)
+set(CLI_SOURCES
+    src/outlinetool_cli.cpp
 )
 
 # Build options
 option(BUILD_SHARED_LIB "Build shared library (.dylib/.so)" ON)
 option(BUILD_EXECUTABLE "Build command-line executable" ON)
+option(BUILD_CLI_TOOL "Build CLI tool that uses shared library" ON)
 
 # Create shared library
 if(BUILD_SHARED_LIB)
@@ -131,9 +171,19 @@ if(BUILD_SHARED_LIB)
         FILE ${PROJECT_NAME}Config.cmake
         DESTINATION lib/cmake/${PROJECT_NAME}
     )
+    
+    # Create and install pkg-config file
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/outlinetool.pc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/outlinetool.pc
+        @ONLY
+    )
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/outlinetool.pc
+        DESTINATION lib/pkgconfig
+    )
 endif()
 
-# Create executable
+# Create executable (monolithic - includes all source directly)
 if(BUILD_EXECUTABLE)
     add_executable(${PROJECT_NAME} ${EXECUTABLE_SOURCES} ${CORE_SOURCES})
     
@@ -158,6 +208,48 @@ if(BUILD_EXECUTABLE)
     )
 endif()
 
+# Create CLI tool (uses shared library)
+if(BUILD_CLI_TOOL AND BUILD_SHARED_LIB)
+    add_executable(${PROJECT_NAME}CLI ${CLI_SOURCES})
+    
+    # Set executable name
+    set_target_properties(${PROJECT_NAME}CLI PROPERTIES
+        OUTPUT_NAME "outlinetool"
+    )
+    
+    # Include directories for CLI tool
+    target_include_directories(${PROJECT_NAME}CLI
+        PRIVATE
+            include
+    )
+    
+    # Link to shared library
+    target_link_libraries(${PROJECT_NAME}CLI
+        PRIVATE
+            ${PROJECT_NAME}Lib
+    )
+    
+    # Set rpath for finding the shared library
+    if(APPLE)
+        set_target_properties(${PROJECT_NAME}CLI PROPERTIES
+            INSTALL_RPATH "@loader_path/../lib"
+            BUILD_RPATH "@loader_path"
+            BUILD_WITH_INSTALL_RPATH FALSE
+        )
+    else()
+        set_target_properties(${PROJECT_NAME}CLI PROPERTIES
+            INSTALL_RPATH "$ORIGIN/../lib"
+            BUILD_RPATH "$ORIGIN"
+            BUILD_WITH_INSTALL_RPATH FALSE
+        )
+    endif()
+    
+    # Installation for CLI tool
+    install(TARGETS ${PROJECT_NAME}CLI
+        RUNTIME DESTINATION bin
+    )
+endif()
+
 # Print build summary
 message(STATUS "")
 message(STATUS "Build Summary:")
@@ -165,4 +257,13 @@ message(STATUS "  Project: ${PROJECT_NAME} v${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ standard: C++${CMAKE_CXX_STANDARD}")
 message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
+if(BUILD_SHARED_LIB)
+    message(STATUS "  Building: Shared library (liboutlinetool.dylib)")
+endif()
+if(BUILD_CLI_TOOL AND BUILD_SHARED_LIB)
+    message(STATUS "  Building: CLI tool (outlinetool) using shared library")
+endif()
+if(BUILD_EXECUTABLE)
+    message(STATUS "  Building: Monolithic executable (OutlineTool)")
+endif()
 message(STATUS "")

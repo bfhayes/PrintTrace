@@ -3,6 +3,8 @@
         "vector": "cpp",
         "iostream": "cpp",
         "algorithm": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "cstdlib": "cpp",
+        "memory": "cpp"
     }
 }
