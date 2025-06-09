@@ -30,8 +30,11 @@ typedef enum {
 
 // Processing parameters structure (CAD-optimized)
 typedef struct {
-    int32_t warp_size;              // Target image size after perspective correction (range: 500-8000, default: 3240)
-    double real_world_size_mm;      // Real-world size in millimeters (range: 10.0-500.0, default: 162.0)
+    // Lightbox dimensions after perspective correction
+    int32_t lightbox_width_px;      // Target lightbox width in pixels (range: 500-8000, default: 3240)
+    int32_t lightbox_height_px;     // Target lightbox height in pixels (range: 500-8000, default: 3240)
+    double lightbox_width_mm;       // Real-world lightbox width in millimeters (range: 10.0-500.0, default: 162.0)
+    double lightbox_height_mm;      // Real-world lightbox height in millimeters (range: 10.0-500.0, default: 162.0)
     
     // Edge detection parameters (replacing threshold)
     double canny_lower;             // Canny lower threshold (range: 10.0-200.0, default: 50.0)
@@ -84,11 +87,15 @@ typedef struct {
 
 // Parameter ranges structure for UI slider configuration
 typedef struct {
-    // Image processing parameters
-    int32_t warp_size_min;          // 500
-    int32_t warp_size_max;          // 8000
-    double real_world_size_mm_min;  // 10.0
-    double real_world_size_mm_max;  // 500.0
+    // Lightbox dimension ranges
+    int32_t lightbox_width_px_min;  // 500
+    int32_t lightbox_width_px_max;  // 8000
+    int32_t lightbox_height_px_min; // 500
+    int32_t lightbox_height_px_max; // 8000
+    double lightbox_width_mm_min;   // 10.0
+    double lightbox_width_mm_max;   // 500.0
+    double lightbox_height_mm_min;  // 10.0
+    double lightbox_height_mm_max;  // 500.0
     
     // Edge detection ranges
     double canny_lower_min;         // 10.0

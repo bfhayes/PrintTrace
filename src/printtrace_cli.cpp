@@ -243,8 +243,8 @@ int main(int argc, char* argv[]) {
 
     if (args.verbose) {
         cout << "[INFO] Using CAD-optimized parameters:" << endl;
-        cout << "  Warp size: " << params.warp_size << "px" << endl;
-        cout << "  Real world size: " << params.real_world_size_mm << "mm" << endl;
+        cout << "  Lightbox size: " << params.lightbox_width_px << "x" << params.lightbox_height_px << "px" << endl;
+        cout << "  Real world size: " << params.lightbox_width_mm << "x" << params.lightbox_height_mm << "mm" << endl;
         cout << "  Canny edges: " << params.canny_lower << "-" << params.canny_upper << endl;
         cout << "  CLAHE clip limit: " << params.clahe_clip_limit << endl;
         cout << "  Object detection: ";

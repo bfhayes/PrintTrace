@@ -15,8 +15,11 @@ namespace {
     ImageProcessor::ProcessingParams convertParams(const PrintTraceParams* params) {
         ImageProcessor::ProcessingParams cpp_params;
         if (params) {
-            cpp_params.warpSize = params->warp_size;
-            cpp_params.realWorldSizeMM = params->real_world_size_mm;
+            // Convert lightbox dimensions to Size and scaling
+            cpp_params.lightboxWidthPx = params->lightbox_width_px;
+            cpp_params.lightboxHeightPx = params->lightbox_height_px;
+            cpp_params.lightboxWidthMM = params->lightbox_width_mm;
+            cpp_params.lightboxHeightMM = params->lightbox_height_mm;
             
             // New CAD-optimized parameters
             cpp_params.cannyLower = params->canny_lower;
@@ -150,8 +153,11 @@ namespace {
 void print_trace_get_default_params(PrintTraceParams* params) {
     if (!params) return;
     
-    params->warp_size = 3240;
-    params->real_world_size_mm = 162.0;
+    // Default to square lightbox (162mm x 162mm at 3240x3240px)
+    params->lightbox_width_px = 3240;
+    params->lightbox_height_px = 3240;
+    params->lightbox_width_mm = 162.0;
+    params->lightbox_height_mm = 162.0;
     
     // CAD-optimized edge detection parameters
     params->canny_lower = 50.0;
@@ -205,11 +211,15 @@ void print_trace_get_default_params(PrintTraceParams* params) {
 void print_trace_get_param_ranges(PrintTraceParamRanges* ranges) {
     if (!ranges) return;
     
-    // Image processing parameter ranges
-    ranges->warp_size_min = 500;
-    ranges->warp_size_max = 8000;
-    ranges->real_world_size_mm_min = 10.0;
-    ranges->real_world_size_mm_max = 500.0;
+    // Lightbox dimension ranges
+    ranges->lightbox_width_px_min = 500;
+    ranges->lightbox_width_px_max = 8000;
+    ranges->lightbox_height_px_min = 500;
+    ranges->lightbox_height_px_max = 8000;
+    ranges->lightbox_width_mm_min = 10.0;
+    ranges->lightbox_width_mm_max = 500.0;
+    ranges->lightbox_height_mm_min = 10.0;
+    ranges->lightbox_height_mm_max = 500.0;
     
     // Edge detection ranges
     ranges->canny_lower_min = 10.0;
@@ -270,13 +280,20 @@ PrintTraceResult print_trace_validate_params(const PrintTraceParams* params) {
     PrintTraceParamRanges ranges;
     print_trace_get_param_ranges(&ranges);
     
-    // Basic parameters
-    if (params->warp_size < ranges.warp_size_min || params->warp_size > ranges.warp_size_max) {
+    // Lightbox dimension parameters
+    if (params->lightbox_width_px < ranges.lightbox_width_px_min || params->lightbox_width_px > ranges.lightbox_width_px_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
-    if (params->real_world_size_mm < ranges.real_world_size_mm_min || 
-        params->real_world_size_mm > ranges.real_world_size_mm_max) {
+    if (params->lightbox_height_px < ranges.lightbox_height_px_min || params->lightbox_height_px > ranges.lightbox_height_px_max) {
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
+    }
+    
+    if (params->lightbox_width_mm < ranges.lightbox_width_mm_min || params->lightbox_width_mm > ranges.lightbox_width_mm_max) {
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
+    }
+    
+    if (params->lightbox_height_mm < ranges.lightbox_height_mm_min || params->lightbox_height_mm > ranges.lightbox_height_mm_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     
@@ -487,7 +504,10 @@ PrintTraceResult print_trace_process_to_stage(
         
         // Convert contour if available and requested
         if (contour && !result_contour.empty()) {
-            double pixels_per_mm = static_cast<double>(cpp_params.warpSize) / cpp_params.realWorldSizeMM;
+            // Calculate average pixels per mm for backward compatibility
+            double pixels_per_mm_width = static_cast<double>(cpp_params.lightboxWidthPx) / cpp_params.lightboxWidthMM;
+            double pixels_per_mm_height = static_cast<double>(cpp_params.lightboxHeightPx) / cpp_params.lightboxHeightMM;
+            double pixels_per_mm = (pixels_per_mm_width + pixels_per_mm_height) / 2.0;
             convertContour(result_contour, pixels_per_mm, contour);
         }
         

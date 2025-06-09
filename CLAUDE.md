@@ -80,9 +80,11 @@ include/
 
 Processing parameters are defined in `PrintTraceParams` with full range validation:
 
-**Core Parameters:**
-- `warp_size`: Target image size after perspective correction (range: 500-8000, default: 3240)
-- `real_world_size_mm`: Real-world size corresponding to warpSize (range: 10.0-500.0, default: 162.0)
+**Lightbox Parameters (Now supports rectangles!):**
+- `lightbox_width_px`: Target lightbox width in pixels (range: 500-8000, default: 3240)
+- `lightbox_height_px`: Target lightbox height in pixels (range: 500-8000, default: 3240)
+- `lightbox_width_mm`: Real-world lightbox width in millimeters (range: 10.0-500.0, default: 162.0)
+- `lightbox_height_mm`: Real-world lightbox height in millimeters (range: 10.0-500.0, default: 162.0)
 
 **Object Detection Parameters:**
 - `use_adaptive_threshold`: Use adaptive thresholding instead of Otsu (default: false)

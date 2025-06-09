@@ -89,7 +89,10 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         
-        double pixelsPerMM = static_cast<double>(params.warpSize) / params.realWorldSizeMM;
+        // Calculate average pixels per mm for backward compatibility
+        double pixelsPerMMWidth = static_cast<double>(params.lightboxWidthPx) / params.lightboxWidthMM;
+        double pixelsPerMMHeight = static_cast<double>(params.lightboxHeightPx) / params.lightboxHeightMM;
+        double pixelsPerMM = (pixelsPerMMWidth + pixelsPerMMHeight) / 2.0;
         
         if (!DXFWriter::saveContourAsDXF(contour, pixelsPerMM, args.outputPath)) {
             cerr << "[ERROR] Failed to save DXF file." << endl;

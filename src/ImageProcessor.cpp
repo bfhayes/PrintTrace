@@ -228,7 +228,10 @@ vector<Point> ImageProcessor::findObjectContour(const Mat& warpedImg, const Proc
         cout << "[INFO] Attempting to merge nearby contours (max distance: " << params.contourMergeDistanceMM << "mm)" << endl;
         
         // Convert merge distance from mm to pixels
-        double pixelsPerMM = static_cast<double>(warpedImg.cols) / params.realWorldSizeMM;
+        double pixelsPerMMWidth = static_cast<double>(warpedImg.cols) / params.lightboxWidthMM;
+        double pixelsPerMMHeight = static_cast<double>(warpedImg.rows) / params.lightboxHeightMM;
+        // Use average for diagonal measurements
+        double pixelsPerMM = (pixelsPerMMWidth + pixelsPerMMHeight) / 2.0;
         double mergeDistancePx = params.contourMergeDistanceMM * pixelsPerMM;
         
         objectContour = mergeNearbyContours(contours, mergeDistancePx, params);
@@ -709,9 +712,9 @@ vector<Point> ImageProcessor::approximatePolygon(const vector<Point>& contour, d
     return approx;
 }
 
-// New improved warpImage that works with Point2f
+// New improved warpImage that works with Point2f and rectangular lightboxes
 pair<Mat, double> ImageProcessor::warpImage(const Mat& originalImg, const vector<Point2f>& corners,
-                                           int side, double realWorldSizeMM) {
+                                           const cv::Size& targetSize, double realWorldWidthMM, double realWorldHeightMM) {
     if (originalImg.empty()) {
         throw invalid_argument("Input image is empty");
     }
@@ -722,11 +725,11 @@ pair<Mat, double> ImageProcessor::warpImage(const Mat& originalImg, const vector
         throw runtime_error("Expected to find 4 corners in the contour.");
     }
     
-    if (side <= 0 || realWorldSizeMM <= 0) {
-        throw invalid_argument("Side length and real world size must be positive");
+    if (targetSize.width <= 0 || targetSize.height <= 0 || realWorldWidthMM <= 0 || realWorldHeightMM <= 0) {
+        throw invalid_argument("Target size and real world dimensions must be positive");
     }
 
-    cout << "[INFO] Warping image to a square region using refined corners." << endl;
+    cout << "[INFO] Warping image to " << targetSize.width << "x" << targetSize.height << " region using refined corners." << endl;
 
     // Order corners: top-left, top-right, bottom-right, bottom-left
     auto sumCompare = [](const Point2f& a, const Point2f& b) {
@@ -748,19 +751,22 @@ pair<Mat, double> ImageProcessor::warpImage(const Mat& originalImg, const vector
     orderedCorners[2] = *maxSum;  // bottom-right
     orderedCorners[3] = *maxDiff; // bottom-left
 
-    double pixelsPerMM = static_cast<double>(side) / realWorldSizeMM;
-    cout << "[INFO] Computed pixels per mm: " << pixelsPerMM << endl;
+    double pixelsPerMMWidth = static_cast<double>(targetSize.width) / realWorldWidthMM;
+    double pixelsPerMMHeight = static_cast<double>(targetSize.height) / realWorldHeightMM;
+    // Return average pixels per mm for backward compatibility
+    double pixelsPerMM = (pixelsPerMMWidth + pixelsPerMMHeight) / 2.0;
+    cout << "[INFO] Computed pixels per mm - Width: " << pixelsPerMMWidth << ", Height: " << pixelsPerMMHeight << ", Average: " << pixelsPerMM << endl;
 
     vector<Point2f> dstPts{
         Point2f(0.0f, 0.0f), 
-        Point2f(static_cast<float>(side - 1), 0.0f),
-        Point2f(static_cast<float>(side - 1), static_cast<float>(side - 1)),
-        Point2f(0.0f, static_cast<float>(side - 1))
+        Point2f(static_cast<float>(targetSize.width - 1), 0.0f),
+        Point2f(static_cast<float>(targetSize.width - 1), static_cast<float>(targetSize.height - 1)),
+        Point2f(0.0f, static_cast<float>(targetSize.height - 1))
     };
 
     Mat transformMatrix = getPerspectiveTransform(orderedCorners, dstPts);
     Mat warped;
-    warpPerspective(originalImg, warped, transformMatrix, Size(side, side));
+    warpPerspective(originalImg, warped, transformMatrix, targetSize);
     
     cout << "[INFO] Perspective correction completed" << endl;
     return make_pair(warped, pixelsPerMM);
@@ -773,7 +779,7 @@ pair<Mat, double> ImageProcessor::warpImage(const Mat& binaryImg, const vector<P
     for (const auto& pt : approx) {
         corners.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
     }
-    return warpImage(binaryImg, corners, side, realWorldSizeMM);
+    return warpImage(binaryImg, corners, cv::Size(side, side), realWorldSizeMM, realWorldSizeMM);
 }
 
 Mat ImageProcessor::removeNoise(const Mat& binaryImg, int kernelSize, int blurSize, int thresholdValue) {
@@ -896,7 +902,9 @@ vector<Point> ImageProcessor::processImageToContour(const string& inputPath, con
     vector<Point2f> refinedCorners = refineCorners(approxBoundary, normalized, params);
     
     // Step 5: Warp perspective using the original grayscale image (not binary!)
-    auto [warped, pixelsPerMM] = warpImage(normalized, refinedCorners, params.warpSize, params.realWorldSizeMM);
+    auto [warped, pixelsPerMM] = warpImage(normalized, refinedCorners, 
+                                          cv::Size(params.lightboxWidthPx, params.lightboxHeightPx), 
+                                          params.lightboxWidthMM, params.lightboxHeightMM);
     saveDebugImage(warped, "07_warped.jpg", params);
     
     // Step 6: Find object contour in warped image
@@ -1006,7 +1014,8 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
     
     // Warp image using the original grayscale (not binary) for better quality
     auto [warpedImg, pixelsPerMM] = warpImage(grayImg, refinedCorners, 
-                                             params.warpSize, params.realWorldSizeMM);
+                                             cv::Size(params.lightboxWidthPx, params.lightboxHeightPx),
+                                             params.lightboxWidthMM, params.lightboxHeightMM);
     
     saveDebugImage(warpedImg, "05_perspective_corrected.jpg", params);
     
@@ -1092,7 +1101,7 @@ vector<Point> ImageProcessor::mergeNearbyContours(const vector<vector<Point>>& c
     cout << "[INFO] Found " << validContours.size() << " valid contours to merge" << endl;
     
     // Create a mask to draw all contours
-    Mat mask = Mat::zeros(params.warpSize, params.warpSize, CV_8UC1);
+    Mat mask = Mat::zeros(params.lightboxHeightPx, params.lightboxWidthPx, CV_8UC1);
     
     // Draw all valid contours on the mask
     for (size_t i = 0; i < validContours.size(); i++) {

@@ -220,6 +220,12 @@ print_trace_free_contour(&contour);
 PrintTraceParamRanges ranges;
 print_trace_get_param_ranges(&ranges);
 
+// Configure lightbox dimensions (supports rectangles!)
+params.lightbox_width_px = 3240;        // Lightbox width in pixels
+params.lightbox_height_px = 2160;       // Lightbox height in pixels (different for rectangle)
+params.lightbox_width_mm = 162.0;       // Real-world lightbox width in mm
+params.lightbox_height_mm = 108.0;      // Real-world lightbox height in mm
+
 // Configure object detection
 params.threshold_offset = -15.0;        // More inclusive thresholding
 params.disable_morphology = true;       // Preserve peripheral detail

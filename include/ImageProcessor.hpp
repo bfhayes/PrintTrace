@@ -9,8 +9,11 @@ namespace PrintTrace {
 class ImageProcessor {
 public:
     struct ProcessingParams {
-        int warpSize = 3240;
-        double realWorldSizeMM = 162.0;
+        // Lightbox dimensions after perspective correction
+        int lightboxWidthPx = 3240;      // Target lightbox width in pixels
+        int lightboxHeightPx = 3240;     // Target lightbox height in pixels
+        double lightboxWidthMM = 162.0;  // Real-world lightbox width in millimeters
+        double lightboxHeightMM = 162.0; // Real-world lightbox height in millimeters
         
         // Edge detection parameters (replacing threshold)
         double cannyLower = 50.0;
@@ -77,7 +80,7 @@ public:
     
     static std::pair<cv::Mat, double> warpImage(const cv::Mat& originalImg, 
                                                const std::vector<cv::Point2f>& corners,
-                                               int side, double realWorldSizeMM);
+                                               const cv::Size& targetSize, double realWorldWidthMM, double realWorldHeightMM);
     
     // Legacy warpImage for backward compatibility
     static std::pair<cv::Mat, double> warpImage(const cv::Mat& binaryImg, 
