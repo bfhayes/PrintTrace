@@ -31,10 +31,11 @@ typedef enum {
 // Processing parameters structure (CAD-optimized)
 typedef struct {
     // Lightbox dimensions after perspective correction
-    int32_t lightbox_width_px;      // Target lightbox width in pixels (range: 500-8000, default: 3240)
-    int32_t lightbox_height_px;     // Target lightbox height in pixels (range: 500-8000, default: 3240)
+    int32_t lightbox_width_px;      // Target lightbox width in pixels (range: 500-8000, default: 1620)
+    int32_t lightbox_height_px;     // Target lightbox height in pixels (range: 500-8000, default: 1620)
     double lightbox_width_mm;       // Real-world lightbox width in millimeters (range: 10.0-500.0, default: 162.0)
     double lightbox_height_mm;      // Real-world lightbox height in millimeters (range: 10.0-500.0, default: 162.0)
+    double pixels_per_mm;           // Pixels per millimeter ratio (range: 5.0-50.0, default: 10.0)
     
     // Edge detection parameters (replacing threshold)
     double canny_lower;             // Canny lower threshold (range: 10.0-200.0, default: 50.0)
@@ -82,6 +83,9 @@ typedef struct {
     double smoothing_amount_mm;     // Smoothing amount in millimeters (range: 0.1-2.0, default: 0.2)
     int32_t smoothing_mode;         // Smoothing algorithm: 0=morphological, 1=curvature-based (default: 1)
     
+    // Performance optimization
+    bool enable_inpainting;         // Enable inpainting for paper isolation (default: false)
+    
     // Debug visualization
     bool enable_debug_output;       // Enable debug image output (default: false)
 } PrintTraceParams;
@@ -97,6 +101,8 @@ typedef struct {
     double lightbox_width_mm_max;   // 500.0
     double lightbox_height_mm_min;  // 10.0
     double lightbox_height_mm_max;  // 500.0
+    double pixels_per_mm_min;       // 5.0
+    double pixels_per_mm_max;       // 50.0
     
     // Edge detection ranges
     double canny_lower_min;         // 10.0

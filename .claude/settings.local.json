@@ -21,7 +21,8 @@
       "Bash(git rm:*)",
       "Bash(rg:*)",
       "Bash(./build/PrintTrace:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(plantuml:*)"
     ],
     "deny": []
   }

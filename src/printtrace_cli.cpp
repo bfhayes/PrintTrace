@@ -17,6 +17,11 @@ struct Arguments {
     double smoothingMM = 0.2;
     int smoothingMode = 1;             // Default to curvature-based
     
+    // Lightbox dimension parameters (pixels are auto-calculated from MM)
+    double lightboxWidthMM = 0.0;      // 0 = use default
+    double lightboxHeightMM = 0.0;     // 0 = use default
+    double pixelsPerMM = 0.0;          // 0 = use default (20 pixels per mm)
+    
     // Object detection parameters
     bool useAdaptiveThreshold = false;
     double manualThreshold = 0.0;      // 0 = auto
@@ -29,6 +34,13 @@ struct Arguments {
     // Multi-contour detection parameters  
     bool disableContourMerging = false; // Disable contour merging
     double contourMergeDistance = 5.0;  // Contour merge distance in mm
+    
+    // Edge detection parameters
+    double cannyLower = 0.0;           // 0 = use default
+    double cannyUpper = 0.0;           // 0 = use default
+    
+    // Performance parameters
+    bool enableInpainting = false;      // Enable inpainting for cleaner paper isolation
 };
 
 Arguments parseArguments(int argc, char* argv[]) {
@@ -71,6 +83,18 @@ Arguments parseArguments(int argc, char* argv[]) {
             args.disableContourMerging = true;
         } else if ((arg == "--contour-merge-distance") && (i + 1 < argc)) {
             args.contourMergeDistance = stod(argv[++i]);
+        } else if ((arg == "--pixels-per-mm") && (i + 1 < argc)) {
+            args.pixelsPerMM = stod(argv[++i]);
+        } else if ((arg == "--lightbox-width-mm") && (i + 1 < argc)) {
+            args.lightboxWidthMM = stod(argv[++i]);
+        } else if ((arg == "--lightbox-height-mm") && (i + 1 < argc)) {
+            args.lightboxHeightMM = stod(argv[++i]);
+        } else if ((arg == "--canny-lower") && (i + 1 < argc)) {
+            args.cannyLower = stod(argv[++i]);
+        } else if ((arg == "--canny-upper") && (i + 1 < argc)) {
+            args.cannyUpper = stod(argv[++i]);
+        } else if (arg == "--enable-inpainting") {
+            args.enableInpainting = true;
         } else if (arg == "--help" || arg == "-h") {
             return args; // Will trigger usage display
         }
@@ -110,6 +134,13 @@ void printUsage(const char* progName) {
          << "  --smooth-amount <mm>  Smoothing amount in millimeters (default: 0.2, enables smoothing)\n"
          << "  --smooth-mode <0|1>  Smoothing algorithm: 0=morphological (legacy), 1=curvature-based (default)\n"
          << "\n"
+         << "Lightbox Setup (for non-square lightboxes):\n"
+         << "  --lightbox-width-mm <mm>       Real-world lightbox width in mm (default: 162.0)\n"
+         << "  --lightbox-height-mm <mm>      Real-world lightbox height in mm (default: 162.0)\n"
+         << "  --pixels-per-mm <ratio>        Pixels per millimeter ratio (default: 10.0)\n"
+         << "  --canny-lower <1-200>          Edge detection lower threshold (default: 50, try 5-15 for paper)\n"
+         << "  --canny-upper <10-400>         Edge detection upper threshold (default: 150, try 30-80 for paper)\n"
+         << "\n"
          << "Object Detection:\n"
          << "  --adaptive-threshold  Use adaptive thresholding instead of Otsu (better for uneven lighting)\n"
          << "  --manual-threshold <0-255>  Manual threshold value (0 = auto, overrides Otsu)\n"
@@ -118,6 +149,9 @@ void printUsage(const char* progName) {
          << "  --morph-kernel-size <3-15>  Size of morphological kernel (smaller = less aggressive cleaning)\n"
          << "  --disable-contour-merging  Disable multi-contour merging (use single largest contour only)\n"
          << "  --contour-merge-distance <1-20>  Max distance in mm to merge object parts (default: 5.0)\n"
+         << "\n"
+         << "Performance:\n"
+         << "  --enable-inpainting  Enable inpainting for cleaner paper isolation (slower but better quality)\n"
          << "\n"
          << "General:\n"
          << "  -v, --verbose Enable verbose output\n"
@@ -139,6 +173,16 @@ void printUsage(const char* progName) {
          << "  " << progName << " -i photo.jpg --morph-kernel-size 3   # Gentle morphological cleaning\n"
          << "  " << progName << " -i photo.jpg --disable-contour-merging # Use single largest contour only\n"
          << "  " << progName << " -i photo.jpg --contour-merge-distance 2.0 # Merge parts within 2mm\n"
+         << "\n"
+         << "Lightbox Examples:\n"
+         << "  " << progName << " -i photo.jpg --lightbox-width-mm 210 --lightbox-height-mm 297  # A4 paper (portrait)\n"
+         << "  " << progName << " -i photo.jpg --lightbox-width-mm 297 --lightbox-height-mm 210  # A4 paper (landscape)\n"
+         << "  " << progName << " -i photo.jpg --lightbox-width-mm 216 --lightbox-height-mm 279  # US Letter\n"
+         << "  " << progName << " -i photo.jpg --lightbox-width-mm 162 --lightbox-height-mm 162  # Square lightbox\n"
+         << "  " << progName << " -i photo.jpg --pixels-per-mm 15.0  # Lower resolution (15 pixels per mm)\n"
+         << "  " << progName << " -i photo.jpg --pixels-per-mm 25.0  # Higher resolution (25 pixels per mm)\n"
+         << "\n"
+         << "General:\n"
          << "  " << progName << " -i photo.jpg -v\n"
          << "  " << progName << " -i photo.jpg -d  # Saves debug images to ./debug/\n"
          << endl;
@@ -182,6 +226,38 @@ int main(int argc, char* argv[]) {
     // Get default parameters
     PrintTraceParams params;
     print_trace_get_default_params(&params);
+    
+    // Use pixels per mm from parameters or command line
+    double pixelsPerMM = args.pixelsPerMM > 0.0 ? args.pixelsPerMM : params.pixels_per_mm;
+    
+    // Set lightbox dimensions if requested
+    if (args.lightboxWidthMM > 0.0) {
+        params.lightbox_width_mm = args.lightboxWidthMM;
+        params.lightbox_width_px = (int32_t)(args.lightboxWidthMM * pixelsPerMM);
+        cout << "[INFO] Lightbox real-world width set to " << args.lightboxWidthMM << "mm (" << params.lightbox_width_px << "px)" << endl;
+    }
+    if (args.lightboxHeightMM > 0.0) {
+        params.lightbox_height_mm = args.lightboxHeightMM;
+        params.lightbox_height_px = (int32_t)(args.lightboxHeightMM * pixelsPerMM);
+        cout << "[INFO] Lightbox real-world height set to " << args.lightboxHeightMM << "mm (" << params.lightbox_height_px << "px)" << endl;
+    }
+    if (args.pixelsPerMM > 0.0) {
+        // If pixels per mm was explicitly set, update it and recalculate pixel dimensions
+        params.pixels_per_mm = args.pixelsPerMM;
+        params.lightbox_width_px = (int32_t)(params.lightbox_width_mm * params.pixels_per_mm);
+        params.lightbox_height_px = (int32_t)(params.lightbox_height_mm * params.pixels_per_mm);
+        cout << "[INFO] Pixels per mm set to " << args.pixelsPerMM << " (" << params.lightbox_width_px << "x" << params.lightbox_height_px << "px)" << endl;
+    }
+    
+    // Set edge detection parameters if requested
+    if (args.cannyLower > 0.0) {
+        params.canny_lower = args.cannyLower;
+        cout << "[INFO] Canny lower threshold set to " << args.cannyLower << endl;
+    }
+    if (args.cannyUpper > 0.0) {
+        params.canny_upper = args.cannyUpper;
+        cout << "[INFO] Canny upper threshold set to " << args.cannyUpper << endl;
+    }
     
     // Enable debug output if requested
     if (args.debug) {
@@ -240,6 +316,11 @@ int main(int argc, char* argv[]) {
     if (args.contourMergeDistance != 5.0) {
         params.contour_merge_distance_mm = args.contourMergeDistance;
         cout << "[INFO] Contour merge distance: " << args.contourMergeDistance << "mm" << endl;
+    }
+    
+    if (args.enableInpainting) {
+        params.enable_inpainting = true;
+        cout << "[INFO] Inpainting enabled for cleaner paper isolation (this may slow down processing)" << endl;
     }
 
     // Validate parameters

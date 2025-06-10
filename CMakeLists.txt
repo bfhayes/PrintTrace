@@ -15,7 +15,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
 # Find required packages
-find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs photo)
 if(NOT OpenCV_FOUND)
     message(FATAL_ERROR "OpenCV not found. Please install OpenCV or set OpenCV_DIR.")
 endif()

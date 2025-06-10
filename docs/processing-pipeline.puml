@@ -4,47 +4,106 @@ skinparam backgroundColor white
 skinparam defaultFontSize 12
 skinparam boxPadding 10
 
-title PrintTrace Processing Pipeline
+title PrintTrace Processing Pipeline (8 Stages)
 
 start
 
-:📷 **Load Image**
-Read input photo;
+partition "**Stage 0: LOADED**" {
+  :📷 **Load Image**
+  Read input photo;
+  :⚫ **Convert to Grayscale**
+  Convert color image to grayscale;
+  note right
+    Debug: 01_original.jpg, 02_grayscale.jpg
+  end note
+}
 
-:🔦 **Normalize Lighting**
-Apply CLAHE to even out lighting;
+partition "**Stage 1: LIGHTBOX_CROPPED**" {
+  :🔦 **Normalize Lighting**
+  Apply division normalization;
+  :🔍 **Detect Edges**
+  Use Canny edge detection;
+  :⬜ **Find Boundary**
+  Locate paper/lightbox boundary;
+  :📐 **Refine Corners**
+  Approximate to 4 corners;
+  :🔄 **Perspective Correction**
+  Warp to uniform dimensions;
+  note right
+    Debug: 03_normalized.jpg through 08_perspective_corrected.jpg
+    **First uniform stage** - 1620×1620px default
+  end note
+}
 
-:⬜ **Detect Lightbox**
-Find bright white square boundary
-using intensity thresholding;
+partition "**Stage 2: NORMALIZED**" {
+  :🔦 **Normalize Warped Image**
+  Apply lighting normalization
+  to warped image;
+  note right
+    Debug: 09_warped_normalized.jpg
+  end note
+}
 
-:📐 **Perspective Correction**
-Warp image to remove camera angle
-using 4-corner transformation;
+partition "**Stage 3: BOUNDARY_DETECTED**" {
+  :📍 **Return Boundary Data**
+  Provide corner points for UI;
+  note right
+    Mainly for visualization
+  end note
+}
 
-:🎯 **Object Detection**
-Find object using binary thresholding
-(dark object on white background);
-
-:✨ **Detail Preservation**
-Keep original contour points
-(no approximation for maximum detail);
+partition "**Stage 4: OBJECT_DETECTED**" {
+  :🔧 **Preprocess Image**
+  Apply morphological operations
+  (if enabled);
+  :🎯 **Apply Thresholding**
+  Adaptive or Otsu with offset;
+  :👁️ **Find Object Contours**
+  Detect dark objects on white;
+  :🔗 **Merge Contours**
+  Combine nearby object parts
+  (if enabled);
+  note right
+    Debug: 10_object_preprocessed.jpg through 15_object_contour.jpg
+  end note
+}
 
 if (Smoothing enabled?) then (yes)
-  :🪚 **Smoothing**
-  Remove small details using
-  morphological operations;
+  partition "**Stage 5: SMOOTHED**" {
+    :🪚 **Smooth Contour**
+    Apply morphological or
+    curvature-based smoothing;
+    note right
+      Debug: 16_smoothed_contour.jpg
+      **Conditional stage**
+    end note
+  }
 else (no)
-  :Skip smoothing;
+  :Skip smoothing stage;
 endif
 
-if (Tolerance > 0?) then (yes)
-  :📏 **Add Tolerance**
-  Expand outline by specified
-  amount for fitting clearance;
+if (Dilation > 0mm?) then (yes)
+  partition "**Stage 6: DILATED**" {
+    :📏 **Dilate Contour**
+    Expand outline by tolerance
+    amount for fitting clearance;
+    note right
+      Debug: 17_dilated_contour.jpg
+      **Conditional stage**
+    end note
+  }
 else (no)
-  :Skip tolerance;
+  :Skip dilation stage;
 endif
+
+partition "**Stage 7: FINAL**" {
+  :✅ **Validate Contour**
+  Check closure, perimeter,
+  and other requirements;
+  note right
+    Debug: 18_final_contour.jpg
+  end note
+}
 
 :💾 **Export to DXF**
 Save as CAD-compatible
@@ -52,18 +111,5 @@ vector file with real-world
 coordinates in millimeters;
 
 stop
-
-note right
-  **Debug Mode (-d)**
-  Saves intermediate images
-  at each step for visualization
-end note
-
-note left
-  **3D Printing Features**
-  • Smoothing removes print artifacts
-  • Tolerance adds fitting clearance
-  • Real-world scale accuracy
-end note
 
 @enduml

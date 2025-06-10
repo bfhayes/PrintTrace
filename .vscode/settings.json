@@ -8,6 +8,7 @@
         "memory": "cpp",
         "exception": "cpp",
         "stdexcept": "cpp",
-        "cstring": "cpp"
+        "cstring": "cpp",
+        "string": "cpp"
     }
 }

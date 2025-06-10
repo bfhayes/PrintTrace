@@ -62,13 +62,14 @@ include/
 
 ### Processing Pipeline
 
-1. Load and validate image (`ImageProcessor::loadImage()`)
-2. Convert to grayscale and threshold (`convertToGrayscale()`, `thresholdImage()`)
-3. Find document/lightbox boundary (`findLargestContour()`, `approximatePolygon()`)
-4. Apply perspective correction (`warpImage()`)
-5. Clean up noise (`removeNoise()`)
-6. Extract object contour (`findMainContour()`)
-7. Export to DXF (`DXFWriter::saveContourAsDXF()`)
+1. Load and validate image (`ImageProcessor::loadImage()`) - **Keep color**
+2. Normalize lighting on color image (`normalizeLighting()` with Lab CLAHE)
+3. Detect paper boundary using color analysis (`detectEdges()` with Lab color space)
+4. Find boundary contour and refine corners (`findBoundaryContour()`, `refineCorners()`)
+5. Apply perspective correction on color image (`warpImage()`)
+6. **Convert to grayscale for object detection** (`convertToGrayscale()`)
+7. Extract object contour within paper (`findObjectContour()`)
+8. Export to DXF (`DXFWriter::saveContourAsDXF()`)
 
 ### Dependencies
 
@@ -81,10 +82,11 @@ include/
 Processing parameters are defined in `PrintTraceParams` with full range validation:
 
 **Lightbox Parameters (Now supports rectangles!):**
-- `lightbox_width_px`: Target lightbox width in pixels (range: 500-8000, default: 3240)
-- `lightbox_height_px`: Target lightbox height in pixels (range: 500-8000, default: 3240)
 - `lightbox_width_mm`: Real-world lightbox width in millimeters (range: 10.0-500.0, default: 162.0)
 - `lightbox_height_mm`: Real-world lightbox height in millimeters (range: 10.0-500.0, default: 162.0)
+- `lightbox_width_px`: Auto-calculated from MM dimensions and pixels-per-mm ratio
+- `lightbox_height_px`: Auto-calculated from MM dimensions and pixels-per-mm ratio
+- **Pixels per MM ratio**: Default 10.0, adjustable via `--pixels-per-mm`
 
 **Object Detection Parameters:**
 - `use_adaptive_threshold`: Use adaptive thresholding instead of Otsu (default: false)
@@ -104,6 +106,11 @@ Processing parameters are defined in `PrintTraceParams` with full range validati
 - `enable_smoothing`: Enable smoothing for easier 3D printing (default: false)
 - `smoothing_amount_mm`: Smoothing amount (range: 0.1-2.0, default: 0.2)
 
+**Performance Optimization:**
+- `enable_inpainting`: Enable inpainting for cleaner paper isolation (default: false)
+  - When disabled: Uses simple masking (faster)
+  - When enabled: Uses cv::inpaint to remove objects from paper (slower but cleaner)
+
 ### Usage Pattern
 
 ```bash
@@ -112,6 +119,11 @@ Processing parameters are defined in `PrintTraceParams` with full range validati
 
 **New CLI Options for Advanced Control:**
 ```bash
+# Lightbox setup (pixels auto-calculated from MM dimensions)
+--lightbox-width-mm <mm>               # Real-world lightbox width (default: 162.0)
+--lightbox-height-mm <mm>              # Real-world lightbox height (default: 162.0)
+--pixels-per-mm <ratio>                # Pixels per millimeter ratio (default: 10.0)
+
 # Object detection controls
 --adaptive-threshold                    # Better for uneven lighting
 --manual-threshold <0-255>             # Override automatic threshold
@@ -120,6 +132,9 @@ Processing parameters are defined in `PrintTraceParams` with full range validati
 # Morphological processing controls  
 --disable-morphology                   # Preserve peripheral detail (switches, tabs, etc.)
 --morph-kernel-size <3-15>            # Gentler cleaning (3 = gentle, 15 = aggressive)
+
+# Performance controls
+--enable-inpainting                    # Better paper isolation but slower (off by default)
 
 # Debug and analysis
 -d, --debug                           # Save step-by-step debug images
@@ -143,6 +158,13 @@ print_trace_process_to_stage(input, params, PRINT_TRACE_STAGE_LIGHTBOX_CROPPED, 
 ```
 
 The tool expects images with clear rectangular boundaries (lightbox/document) and objects on contrasting backgrounds.
+
+**Performance Optimizations:**
+- **Inpainting disabled by default** - Significantly faster processing without cv::inpaint
+- **Optimized median calculation** - Uses mean approximation instead of full pixel sorting
+- **Configurable Canny thresholds** - Skip auto-calculation when thresholds are provided
+- **Default pixels-per-mm reduced to 10** - Smaller default image sizes (1620×1620 instead of 3240×3240)
+- **Delayed grayscale conversion** - Keeps color data until step 6 for better paper boundary detection
 
 **Key Improvements:**
 - **Multi-contour detection** now preserves small object parts (like switches, tabs)

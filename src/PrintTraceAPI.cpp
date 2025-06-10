@@ -57,6 +57,8 @@ namespace {
             cpp_params.smoothingAmountMM = params->smoothing_amount_mm;
             cpp_params.smoothingMode = params->smoothing_mode;
             
+            cpp_params.enableInpainting = params->enable_inpainting;
+            
             cpp_params.enableDebugOutput = params->enable_debug_output;
         }
         return cpp_params;
@@ -154,11 +156,12 @@ namespace {
 void print_trace_get_default_params(PrintTraceParams* params) {
     if (!params) return;
     
-    // Default to square lightbox (162mm x 162mm at 3240x3240px)
-    params->lightbox_width_px = 3240;
-    params->lightbox_height_px = 3240;
+    // Default to square lightbox (162mm x 162mm at 10 pixels per mm)
+    params->pixels_per_mm = 10.0;
     params->lightbox_width_mm = 162.0;
     params->lightbox_height_mm = 162.0;
+    params->lightbox_width_px = (int32_t)(params->lightbox_width_mm * params->pixels_per_mm);
+    params->lightbox_height_px = (int32_t)(params->lightbox_height_mm * params->pixels_per_mm);
     
     // CAD-optimized edge detection parameters
     params->canny_lower = 50.0;
@@ -206,6 +209,9 @@ void print_trace_get_default_params(PrintTraceParams* params) {
     params->smoothing_amount_mm = 0.2;
     params->smoothing_mode = 1;  // Default to curvature-based smoothing
     
+    // Performance optimization
+    params->enable_inpainting = false;  // Disabled by default for speed
+    
     // Debug settings
     params->enable_debug_output = false;
 }
@@ -222,11 +228,13 @@ void print_trace_get_param_ranges(PrintTraceParamRanges* ranges) {
     ranges->lightbox_width_mm_max = 500.0;
     ranges->lightbox_height_mm_min = 10.0;
     ranges->lightbox_height_mm_max = 500.0;
+    ranges->pixels_per_mm_min = 5.0;
+    ranges->pixels_per_mm_max = 50.0;
     
-    // Edge detection ranges
-    ranges->canny_lower_min = 10.0;
+    // Edge detection ranges (expanded for paper boundary detection)
+    ranges->canny_lower_min = 1.0;   // Allow very sensitive detection for paper edges
     ranges->canny_lower_max = 200.0;
-    ranges->canny_upper_min = 50.0;
+    ranges->canny_upper_min = 10.0;  // Allow lower upper threshold for faint edges
     ranges->canny_upper_max = 400.0;
     ranges->canny_aperture_values[0] = 3;
     ranges->canny_aperture_values[1] = 5;
@@ -298,6 +306,10 @@ PrintTraceResult print_trace_validate_params(const PrintTraceParams* params) {
     }
     
     if (params->lightbox_height_mm < ranges.lightbox_height_mm_min || params->lightbox_height_mm > ranges.lightbox_height_mm_max) {
+        return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
+    }
+    
+    if (params->pixels_per_mm < ranges.pixels_per_mm_min || params->pixels_per_mm > ranges.pixels_per_mm_max) {
         return PRINT_TRACE_ERROR_INVALID_PARAMETERS;
     }
     

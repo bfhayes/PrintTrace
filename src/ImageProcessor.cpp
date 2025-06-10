@@ -37,8 +37,508 @@ Mat ImageProcessor::convertToGrayscale(const Mat& img) {
     return gray;
 }
 
-// New improved pipeline methods
+// New streamlined corner detection pipeline methods
 
+Mat ImageProcessor::convertBGRToLab(const Mat& bgrImg) {
+    cout << "[INFO] Converting BGR to LAB color space" << endl;
+    Mat labImg;
+    cvtColor(bgrImg, labImg, COLOR_BGR2Lab);
+    return labImg;
+}
+
+Mat ImageProcessor::applyCLAHEToL(const Mat& labImg, const ProcessingParams& params) {
+    cout << "[INFO] Applying CLAHE to L channel for local contrast enhancement" << endl;
+    
+    vector<Mat> labChannels;
+    split(labImg, labChannels);
+    
+    auto clahe = createCLAHE();
+    clahe->setClipLimit(params.claheClipLimit);
+    clahe->setTilesGridSize(Size(params.claheTileSize, params.claheTileSize));
+    
+    Mat enhancedL;
+    clahe->apply(labChannels[0], enhancedL);
+    
+    // Merge back to LAB
+    labChannels[0] = enhancedL;
+    Mat enhancedLab;
+    merge(labChannels, enhancedLab);
+    
+    return enhancedLab;
+}
+
+Mat ImageProcessor::divisionNormalization(const Mat& labImg) {
+    cout << "[INFO] Applying division normalization to flatten lighting gradients" << endl;
+    
+    vector<Mat> labChannels;
+    split(labImg, labChannels);
+    Mat L = labChannels[0];
+    
+    // Create a heavily blurred version for division normalization
+    Mat blurred;
+    GaussianBlur(L, blurred, Size(0, 0), min(L.rows, L.cols) * 0.05); // 5% of image size
+    
+    // Avoid division by zero
+    blurred += 1;
+    
+    // Normalize by division
+    Mat normalized;
+    L.convertTo(normalized, CV_32F);
+    blurred.convertTo(blurred, CV_32F);
+    normalized = normalized / blurred * 128.0; // Scale to reasonable range
+    
+    // Convert back to 8-bit
+    Mat result;
+    normalized.convertTo(result, CV_8U);
+    
+    return result;
+}
+
+Mat ImageProcessor::buildPaperMask(const Mat& labImg, const Mat& normalizedL, const ProcessingParams& params) {
+    cout << "[INFO] Building paper mask with L threshold + A/B inRange + adaptive fallback" << endl;
+    
+    vector<Mat> labChannels;
+    split(labImg, labChannels);
+    Mat L = labChannels[0], A = labChannels[1], B = labChannels[2];
+    
+    // Primary mask: L channel threshold for brightness
+    Mat maskL;
+    threshold(L, maskL, params.labLThresh, 255, THRESH_BINARY);
+    
+    // A and B channel masks for color neutrality (paper should be neutral)
+    Mat maskA, maskB;
+    inRange(A, params.labAmin, params.labAmax, maskA);
+    inRange(B, params.labBmin, params.labBmax, maskB);
+    
+    // Combine all masks
+    Mat paperMask;
+    bitwise_and(maskL, maskA, paperMask);
+    bitwise_and(paperMask, maskB, paperMask);
+    
+    saveDebugImage(paperMask, "paper_mask_lab.jpg", params);
+    
+    // Adaptive threshold fallback for shadow recovery
+    Mat adaptiveMask;
+    adaptiveThreshold(normalizedL, adaptiveMask, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 21, 10);
+    
+    // Combine with adaptive threshold to recover paper pixels lost in shadows
+    Mat combinedMask;
+    bitwise_or(paperMask, adaptiveMask, combinedMask);
+    
+    saveDebugImage(combinedMask, "paper_mask_with_adaptive.jpg", params);
+    
+    return combinedMask;
+}
+
+Mat ImageProcessor::morphologicalCleanup(const Mat& mask, const ProcessingParams& params) {
+    cout << "[INFO] Applying morphological close→open and selecting largest component" << endl;
+    
+    Mat cleaned = mask.clone();
+    
+    // Use large kernel for cleaning up paper mask
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(params.largeKernel, params.largeKernel));
+    
+    // Close first to fill holes in paper
+    morphologyEx(cleaned, cleaned, MORPH_CLOSE, kernel);
+    saveDebugImage(cleaned, "mask_closed.jpg", params);
+    
+    // Then open to remove noise and small objects
+    morphologyEx(cleaned, cleaned, MORPH_OPEN, kernel);
+    saveDebugImage(cleaned, "mask_opened.jpg", params);
+    
+    // Find and keep only the largest component (the paper)
+    vector<vector<Point>> contours;
+    findContours(cleaned, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    
+    if (!contours.empty()) {
+        // Find largest contour
+        double maxArea = 0;
+        int maxIdx = -1;
+        for (size_t i = 0; i < contours.size(); i++) {
+            double area = contourArea(contours[i]);
+            if (area > maxArea) {
+                maxArea = area;
+                maxIdx = static_cast<int>(i);
+            }
+        }
+        
+        // Create mask with only the largest component
+        Mat largestComponent = Mat::zeros(cleaned.size(), CV_8UC1);
+        if (maxIdx >= 0) {
+            drawContours(largestComponent, contours, maxIdx, Scalar(255), FILLED);
+            cout << "[INFO] Kept largest component with area: " << maxArea << endl;
+        }
+        cleaned = largestComponent;
+    }
+    
+    saveDebugImage(cleaned, "largest_component.jpg", params);
+    return cleaned;
+}
+
+vector<Point2f> ImageProcessor::detectCornersFromContour(const Mat& mask, const ProcessingParams& params) {
+    cout << "[INFO] Detecting corners using contour-based method with geometric sanity checks" << endl;
+    
+    vector<vector<Point>> contours;
+    findContours(mask, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    
+    if (contours.empty()) {
+        cout << "[WARN] No contours found for corner detection" << endl;
+        return {};
+    }
+    
+    // Find the largest contour (should be the paper boundary)
+    double maxArea = 0;
+    int maxIdx = -1;
+    for (size_t i = 0; i < contours.size(); i++) {
+        double area = contourArea(contours[i]);
+        if (area > maxArea) {
+            maxArea = area;
+            maxIdx = static_cast<int>(i);
+        }
+    }
+    
+    if (maxIdx < 0) return {};
+    
+    vector<Point> paperContour = contours[maxIdx];
+    
+    // Approximate contour to polygon
+    vector<Point> approx;
+    double perimeter = arcLength(paperContour, true);
+    double epsilon = 0.02 * perimeter; // Start with 2%
+    
+    // Try different epsilon values to get exactly 4 corners
+    for (int attempts = 0; attempts < 10; attempts++) {
+        approxPolyDP(paperContour, approx, epsilon, true);
+        
+        if (approx.size() == 4) {
+            break;
+        } else if (approx.size() > 4) {
+            epsilon += 0.01 * perimeter; // Increase epsilon for fewer points
+        } else {
+            epsilon -= 0.005 * perimeter; // Decrease epsilon for more points
+            if (epsilon <= 0.005 * perimeter) break;
+        }
+    }
+    
+    // Geometric sanity checks
+    if (approx.size() == 4) {
+        Rect boundingRect = cv::boundingRect(approx);
+        double area = contourArea(approx);
+        double rectArea = boundingRect.width * boundingRect.height;
+        double solidity = area / rectArea;
+        
+        double aspectRatio = static_cast<double>(boundingRect.width) / boundingRect.height;
+        if (aspectRatio < 1.0) aspectRatio = 1.0 / aspectRatio; // Always > 1
+        
+        cout << "[INFO] Corner detection - Area: " << area << ", Solidity: " << solidity 
+             << ", Aspect ratio: " << aspectRatio << endl;
+        
+        // Check geometric constraints
+        if (area > mask.total() * 0.1 &&  // Reasonable area (>10% of image)
+            solidity > params.minSolidity && // Good rectangularity
+            aspectRatio < params.maxAspectRatio) { // Reasonable aspect ratio
+            
+            // Convert to Point2f
+            vector<Point2f> corners;
+            for (const Point& pt : approx) {
+                corners.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
+            }
+            
+            cout << "[INFO] Contour-based corner detection successful" << endl;
+            return corners;
+        } else {
+            cout << "[WARN] Contour failed geometric sanity checks" << endl;
+        }
+    }
+    
+    cout << "[WARN] Contour-based corner detection failed" << endl;
+    return {};
+}
+
+vector<Point2f> ImageProcessor::detectCornersFromEdges(const Mat& normalizedL, const ProcessingParams& params) {
+    cout << "[INFO] Edge-based fallback using Canny + HoughLines + clustering" << endl;
+    
+    // Apply Canny edge detection
+    Mat edges;
+    Canny(normalizedL, edges, params.cannyLower, params.cannyUpper, params.cannyAperture);
+    saveDebugImage(edges, "canny_edges.jpg", params);
+    
+    // Detect lines using HoughLines
+    vector<Vec2f> lines;
+    HoughLines(edges, lines, 1, CV_PI/180, 50); // 50 votes threshold
+    
+    if (lines.size() < 4) {
+        cout << "[WARN] Not enough lines detected for corner finding: " << lines.size() << endl;
+        return {};
+    }
+    
+    cout << "[INFO] Detected " << lines.size() << " lines with Hough transform" << endl;
+    
+    // Cluster lines into horizontal and vertical groups
+    vector<Vec2f> horizontalLines, verticalLines;
+    
+    for (const auto& line : lines) {
+        float theta = line[1];
+        // Convert to degrees for easier understanding
+        float degrees = theta * 180.0 / CV_PI;
+        
+        // Horizontal lines (theta close to 0 or 180)
+        if (abs(degrees) < 20 || abs(degrees - 180) < 20) {
+            horizontalLines.push_back(line);
+        }
+        // Vertical lines (theta close to 90)
+        else if (abs(degrees - 90) < 20) {
+            verticalLines.push_back(line);
+        }
+    }
+    
+    cout << "[INFO] Found " << horizontalLines.size() << " horizontal and " 
+         << verticalLines.size() << " vertical lines" << endl;
+    
+    if (horizontalLines.size() < 2 || verticalLines.size() < 2) {
+        cout << "[WARN] Not enough horizontal or vertical lines for corner detection" << endl;
+        return {};
+    }
+    
+    // Sort lines by their distance from origin (rho parameter)
+    sort(horizontalLines.begin(), horizontalLines.end(), 
+         [](const Vec2f& a, const Vec2f& b) { return a[0] < b[0]; });
+    sort(verticalLines.begin(), verticalLines.end(), 
+         [](const Vec2f& a, const Vec2f& b) { return a[0] < b[0]; });
+    
+    // Take the two most extreme horizontal and vertical lines
+    Vec2f topLine = horizontalLines.front();
+    Vec2f bottomLine = horizontalLines.back();
+    Vec2f leftLine = verticalLines.front();
+    Vec2f rightLine = verticalLines.back();
+    
+    // Calculate intersection points
+    vector<Point2f> corners;
+    
+    // Helper function to find line intersection
+    auto intersectLines = [](const Vec2f& line1, const Vec2f& line2) -> Point2f {
+        float rho1 = line1[0], theta1 = line1[1];
+        float rho2 = line2[0], theta2 = line2[1];
+        
+        float cos1 = cos(theta1), sin1 = sin(theta1);
+        float cos2 = cos(theta2), sin2 = sin(theta2);
+        
+        float det = cos1 * sin2 - sin1 * cos2;
+        if (abs(det) < 0.001) return Point2f(-1, -1); // Parallel lines
+        
+        float x = (sin2 * rho1 - sin1 * rho2) / det;
+        float y = (cos1 * rho2 - cos2 * rho1) / det;
+        
+        return Point2f(x, y);
+    };
+    
+    // Find four corner intersections
+    Point2f topLeft = intersectLines(topLine, leftLine);
+    Point2f topRight = intersectLines(topLine, rightLine);
+    Point2f bottomRight = intersectLines(bottomLine, rightLine);
+    Point2f bottomLeft = intersectLines(bottomLine, leftLine);
+    
+    // Check if intersections are valid
+    vector<Point2f> candidateCorners = {topLeft, topRight, bottomRight, bottomLeft};
+    for (const auto& corner : candidateCorners) {
+        if (corner.x >= 0 && corner.y >= 0 && 
+            corner.x < normalizedL.cols && corner.y < normalizedL.rows) {
+            corners.push_back(corner);
+        }
+    }
+    
+    if (corners.size() == 4) {
+        cout << "[INFO] Edge-based corner detection successful" << endl;
+        return corners;
+    } else {
+        cout << "[WARN] Edge-based corner detection failed - found " << corners.size() << " valid corners" << endl;
+        return {};
+    }
+}
+
+vector<Point2f> ImageProcessor::orderCorners(const vector<Point2f>& corners) {
+    cout << "[INFO] Ordering corners using sum/diff trick for consistent warping" << endl;
+    
+    if (corners.size() != 4) {
+        cout << "[ERROR] Expected 4 corners, got " << corners.size() << endl;
+        return corners;
+    }
+    
+    vector<Point2f> ordered(4);
+    
+    // Calculate sum and difference for each corner
+    vector<pair<float, int>> sums, diffs;
+    for (size_t i = 0; i < corners.size(); i++) {
+        sums.push_back({corners[i].x + corners[i].y, static_cast<int>(i)});
+        diffs.push_back({corners[i].y - corners[i].x, static_cast<int>(i)});
+    }
+    
+    // Sort by sum and difference
+    sort(sums.begin(), sums.end());
+    sort(diffs.begin(), diffs.end());
+    
+    // Top-left: smallest sum (x+y)
+    ordered[0] = corners[sums[0].second];
+    
+    // Bottom-right: largest sum (x+y)
+    ordered[2] = corners[sums[3].second];
+    
+    // Top-right: smallest difference (y-x)
+    ordered[1] = corners[diffs[0].second];
+    
+    // Bottom-left: largest difference (y-x)
+    ordered[3] = corners[diffs[3].second];
+    
+    cout << "[INFO] Corners ordered: TL(" << ordered[0].x << "," << ordered[0].y << ") "
+         << "TR(" << ordered[1].x << "," << ordered[1].y << ") "
+         << "BR(" << ordered[2].x << "," << ordered[2].y << ") "
+         << "BL(" << ordered[3].x << "," << ordered[3].y << ")" << endl;
+    
+    return ordered;
+}
+
+bool ImageProcessor::validateCorners(const vector<Point2f>& corners, const Size& imageSize, const ProcessingParams& params) {
+    cout << "[INFO] Validating detected corners" << endl;
+    
+    if (corners.size() != 4) {
+        cout << "[ERROR] Invalid number of corners: " << corners.size() << endl;
+        return false;
+    }
+    
+    // Check all corners are within image bounds
+    for (const auto& corner : corners) {
+        if (corner.x < 0 || corner.y < 0 || 
+            corner.x >= imageSize.width || corner.y >= imageSize.height) {
+            cout << "[ERROR] Corner out of bounds: (" << corner.x << "," << corner.y << ")" << endl;
+            return false;
+        }
+    }
+    
+    // Check minimum area
+    double area = contourArea(corners);
+    double minArea = imageSize.width * imageSize.height * 0.1; // At least 10% of image
+    if (area < minArea) {
+        cout << "[ERROR] Corner area too small: " << area << " < " << minArea << endl;
+        return false;
+    }
+    
+    // Check aspect ratio
+    Rect boundingRect = cv::boundingRect(corners);
+    double aspectRatio = static_cast<double>(boundingRect.width) / boundingRect.height;
+    if (aspectRatio < 1.0) aspectRatio = 1.0 / aspectRatio;
+    
+    if (aspectRatio > params.maxAspectRatio) {
+        cout << "[ERROR] Aspect ratio too extreme: " << aspectRatio << " > " << params.maxAspectRatio << endl;
+        return false;
+    }
+    
+    cout << "[INFO] Corner validation passed" << endl;
+    return true;
+}
+
+Mat ImageProcessor::validateWarpedImage(const Mat& warpedImg, const ProcessingParams& params) {
+    cout << "[INFO] Post-warp validation: checking edge energy and chromatic sanity" << endl;
+    
+    // Edge energy check - warped image should have clear edges
+    Mat gray;
+    if (warpedImg.channels() == 3) {
+        cvtColor(warpedImg, gray, COLOR_BGR2GRAY);
+    } else {
+        gray = warpedImg.clone();
+    }
+    
+    // Calculate edge energy using Sobel
+    Mat sobelX, sobelY, edges;
+    Sobel(gray, sobelX, CV_32F, 1, 0, 3);
+    Sobel(gray, sobelY, CV_32F, 0, 1, 3);
+    magnitude(sobelX, sobelY, edges);
+    
+    Scalar meanEdgeEnergy = mean(edges);
+    double edgeThreshold = 10.0; // Minimum edge energy
+    
+    if (meanEdgeEnergy[0] < edgeThreshold) {
+        cout << "[WARN] Low edge energy detected: " << meanEdgeEnergy[0] << " < " << edgeThreshold << endl;
+        cout << "[WARN] Warped image may be blurry or incorrectly perspective-corrected" << endl;
+    } else {
+        cout << "[INFO] Edge energy validation passed: " << meanEdgeEnergy[0] << endl;
+    }
+    
+    // Chromatic sanity check for color images
+    if (warpedImg.channels() == 3) {
+        vector<Mat> channels;
+        split(warpedImg, channels);
+        
+        // Check if color channels are reasonably balanced (not too tinted)
+        Scalar meanB = mean(channels[0]);
+        Scalar meanG = mean(channels[1]);
+        Scalar meanR = mean(channels[2]);
+        
+        double maxDiff = max({abs(meanB[0] - meanG[0]), abs(meanG[0] - meanR[0]), abs(meanR[0] - meanB[0])});
+        double colorBalance = maxDiff / ((meanB[0] + meanG[0] + meanR[0]) / 3.0);
+        
+        if (colorBalance > 0.3) { // More than 30% color imbalance
+            cout << "[WARN] Significant color imbalance detected: " << colorBalance << endl;
+            cout << "[WARN] Image may have color cast or lighting issues" << endl;
+        } else {
+            cout << "[INFO] Chromatic sanity check passed: " << colorBalance << endl;
+        }
+    }
+    
+    saveDebugImage(warpedImg, "validated_warped.jpg", params);
+    return warpedImg;
+}
+
+vector<Point2f> ImageProcessor::detectLightboxCorners(const Mat& bgrImg, const ProcessingParams& params) {
+    cout << "[INFO] ===== STREAMLINED CORNER DETECTION PIPELINE =====" << endl;
+    
+    // Phase 1: Convert BGR to LAB – separates brightness from colour to make whites consistent
+    Mat labImg = convertBGRToLab(bgrImg);
+    saveDebugImage(labImg, "stream_lab.jpg", params);
+    
+    // Phase 2: Apply CLAHE to L channel – boosts local contrast so shadows and glare don't kill edges
+    Mat enhancedLab = applyCLAHEToL(labImg, params);
+    saveDebugImage(enhancedLab, "stream_clahe.jpg", params);
+    
+    // Phase 3: Division normalisation – flattens broad lighting gradients before binarisation
+    Mat normalizedL = divisionNormalization(enhancedLab);
+    saveDebugImage(normalizedL, "stream_division_norm.jpg", params);
+    
+    // Phase 4: Build paper mask with L threshold + A/B inRange – fuses brightness and neutrality to isolate paper
+    // Phase 5: Adaptive threshold fallback – recovers paper pixels lost in deep shadows
+    Mat paperMask = buildPaperMask(enhancedLab, normalizedL, params);
+    
+    // Phase 6: Morphological close→open and keep largest component – fills holes, removes noise, isolates the sheet
+    Mat cleanMask = morphologicalCleanup(paperMask, params);
+    
+    // Phase 7: Contour‑based corner detection (findContours + approxPolyDP) – fast primary path to four corners
+    // Phase 8: Geometric sanity checks (area, aspect ratio, solidity) – rejects four‑sided impostors
+    vector<Point2f> corners = detectCornersFromContour(cleanMask, params);
+    
+    // Phase 9: Edge‑based fallback (Canny + HoughLines + clustering) – rescues cases where contour is broken
+    if (corners.empty()) {
+        cout << "[INFO] Contour-based detection failed, trying edge-based fallback" << endl;
+        corners = detectCornersFromEdges(normalizedL, params);
+    }
+    
+    if (corners.empty()) {
+        cout << "[ERROR] All corner detection methods failed" << endl;
+        return {};
+    }
+    
+    // Phase 10: Order corners with sum/diff trick – ensures consistent point order for warping
+    corners = orderCorners(corners);
+    
+    // Phase 11: Corner validation – final guard against false positives
+    if (!validateCorners(corners, bgrImg.size(), params)) {
+        cout << "[ERROR] Corner validation failed" << endl;
+        return {};
+    }
+    
+    cout << "[INFO] ===== STREAMLINED CORNER DETECTION SUCCESSFUL =====" << endl;
+    return corners;
+}
+
+// Legacy method kept for compatibility
 Mat ImageProcessor::normalizeLighting(const Mat& grayImg, const ProcessingParams& params) {
     cout << "[INFO] Normalizing lighting using CLAHE (Contrast Limited Adaptive Histogram Equalization)" << endl;
     
@@ -53,15 +553,163 @@ Mat ImageProcessor::normalizeLighting(const Mat& grayImg, const ProcessingParams
     return normalized;
 }
 
-Mat ImageProcessor::detectEdges(const Mat& grayImg, const ProcessingParams& params) {
-    cout << "[INFO] Detecting edges for lightbox boundary" << endl;
-    cout << "[INFO] Canny thresholds: " << params.cannyLower << " - " << params.cannyUpper << endl;
+Mat ImageProcessor::detectEdges(
+    const Mat& grayImg,
+    const Mat& colorImg,
+    const ProcessingParams& params
+) {
+    // 1. Lab-based paper mask
+    Mat paperMask;
+    if (!colorImg.empty() && colorImg.channels() == 3) {
+        cout << "[INFO] Using LAB thresholding" << endl;
+        Mat lab; 
+        cvtColor(colorImg, lab, COLOR_BGR2Lab);
+        vector<Mat> ch(3); 
+        split(lab, ch);
+        Mat L = ch[0], A = ch[1], B = ch[2];
+
+        Mat maskL, maskA, maskB;
+        threshold(L, maskL, params.labLThresh, 255, THRESH_BINARY);
+        inRange(A, params.labAmin, params.labAmax, maskA);
+        inRange(B, params.labBmin, params.labBmax, maskB);
+
+        bitwise_and(maskL, maskA, paperMask);
+        bitwise_and(paperMask, maskB, paperMask);
+    } else {
+        cout << "[INFO] Falling back to Otsu Threshold" << endl;
+        double otsu = threshold(grayImg, paperMask, 0, 255, THRESH_BINARY | THRESH_OTSU);
+        threshold(grayImg, paperMask, otsu + params.otsuOffset, 255, THRESH_BINARY);
+    }
+    pushDebugImage(paperMask, "mask_lab", params);
+
+    // 2. Morphology + hole-fill to remove clutter
+    Mat morph = paperMask.clone();
+    Mat bigK = getStructuringElement(
+        MORPH_RECT,
+        Size(params.largeKernel, params.largeKernel)
+    );
+    morphologyEx(morph, morph, MORPH_OPEN,  bigK);
+    morphologyEx(morph, morph, MORPH_CLOSE, bigK);
+
+    // invert into a true mask Mat
+    Mat holeMask;
+    bitwise_not(morph, holeMask);
+
+    // find the little “holes” on the paper
+    vector<vector<Point>> holes;
+    findContours(holeMask, holes, RETR_LIST, CHAIN_APPROX_SIMPLE);
+
+    // fill small holes (draw each contour at index 0 of a single-item list)
+    for (const auto &c : holes) {
+        if (contourArea(c) < morph.total() * params.holeAreaRatio) {
+            vector<vector<Point>> single{ c };
+            drawContours(morph, single, 0, Scalar(255), FILLED);
+        }
+    }
+    pushDebugImage(morph, "mask_clean", params);
+
+    // 3. Robust contour-based corner detection
+    cout << "[INFO] Starting robust contour-based corner detection" << endl;
     
-    Mat edges;
-    Canny(grayImg, edges, params.cannyLower, params.cannyUpper, params.cannyAperture);
+    // Find contours on the clean mask (CCA - Connected Component Analysis)
+    vector<vector<Point>> contours;
+    findContours(morph, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
     
-    cout << "[INFO] Edge detection completed" << endl;
-    return edges;
+    if (contours.empty()) {
+        cout << "[ERROR] No contours found in clean mask" << endl;
+        return Mat::zeros(morph.size(), CV_8UC1);
+    }
+    
+    // Find the largest contour (should be the paper)
+    double maxArea = 0;
+    int bestIdx = -1;
+    for (size_t i = 0; i < contours.size(); i++) {
+        double area = contourArea(contours[i]);
+        if (area > maxArea) {
+            maxArea = area;
+            bestIdx = static_cast<int>(i);
+        }
+    }
+    
+    if (bestIdx < 0) {
+        cout << "[ERROR] No valid contour found" << endl;
+        return Mat::zeros(morph.size(), CV_8UC1);
+    }
+    
+    vector<Point> paperContour = contours[bestIdx];
+    
+    // Apply sanity filters before expensive shape logic
+    double imageArea = morph.total();
+    double areaFraction = maxArea / imageArea;
+    
+    if (areaFraction < 0.1) {
+        cout << "[ERROR] Contour too small (area fraction: " << areaFraction << ")" << endl;
+        return Mat::zeros(morph.size(), CV_8UC1);
+    }
+    
+    // Check convexity and solidity
+    vector<Point> hull;
+    convexHull(paperContour, hull);
+    double hullArea = contourArea(hull);
+    double solidity = maxArea / hullArea;
+    
+    if (solidity < 0.7) {
+        cout << "[WARN] Low solidity detected: " << solidity << " (may be fragmented)" << endl;
+    }
+    
+    cout << "[INFO] Paper contour validation - Area fraction: " << areaFraction 
+         << ", Solidity: " << solidity << endl;
+    
+    // Primary approach: approxPolyDP preserves true border including perspective tilt
+    vector<Point> approx;
+    double perimeter = arcLength(paperContour, true);
+    double epsilon = 0.02 * perimeter; // Start with 2%
+    
+    // Try different epsilon values to get exactly 4 corners
+    vector<Point> bestApprox;
+    for (int attempts = 0; attempts < 10; attempts++) {
+        approxPolyDP(paperContour, approx, epsilon, true);
+        
+        if (approx.size() == 4) {
+            bestApprox = approx;
+            cout << "[INFO] Found 4-corner approximation with epsilon: " << epsilon << endl;
+            break;
+        } else if (approx.size() > 4) {
+            epsilon += 0.005 * perimeter; // Increase epsilon for fewer points
+        } else {
+            epsilon -= 0.002 * perimeter; // Decrease epsilon for more points
+            if (epsilon <= 0.005 * perimeter) break;
+        }
+    }
+    
+    // Fallback: minAreaRect guarantees four corners when contour is broken
+    vector<Point2f> corners;
+    if (bestApprox.size() == 4) {
+        cout << "[INFO] Using approxPolyDP result (preserves true border)" << endl;
+        for (const Point& pt : bestApprox) {
+            corners.emplace_back(static_cast<float>(pt.x), static_cast<float>(pt.y));
+        }
+    } else {
+        cout << "[INFO] Using minAreaRect fallback (guarantees 4 corners)" << endl;
+        RotatedRect minRect = minAreaRect(paperContour);
+        Point2f rectCorners[4];
+        minRect.points(rectCorners);
+        corners.assign(rectCorners, rectCorners + 4);
+    }
+    
+    // Create a clean edge image with just the paper boundary
+    Mat paperEdges = Mat::zeros(morph.size(), CV_8UC1);
+    vector<Point> intCorners;
+    for (const Point2f& corner : corners) {
+        intCorners.emplace_back(static_cast<int>(corner.x), static_cast<int>(corner.y));
+    }
+    
+    // Draw the paper boundary
+    polylines(paperEdges, vector<vector<Point>>{intCorners}, true, Scalar(255), 2);
+    pushDebugImage(paperEdges, "paper_boundary", params);
+    
+    cout << "[INFO] Robust corner detection complete - found " << corners.size() << " corners" << endl;
+    return paperEdges;
 }
 
 // New method specifically for lightbox boundary detection
@@ -82,14 +730,14 @@ Mat ImageProcessor::detectLightboxBoundary(const Mat& grayImg, const ProcessingP
     cout << "[INFO] Using lightbox threshold: " << lightbox_thresh << endl;
     
     // Save intermediate results for debugging
-    saveDebugImage(binary, "04a_lightbox_binary.jpg", params);
+    saveDebugImage(binary, "lightbox_binary.jpg", params);
     
     // Clean up the binary image to get clean rectangular boundary
     Mat kernel = getStructuringElement(MORPH_RECT, Size(5, 5));
     morphologyEx(binary, binary, MORPH_CLOSE, kernel); // Fill small gaps
     morphologyEx(binary, binary, MORPH_OPEN, kernel);  // Remove small noise
     
-    saveDebugImage(binary, "04b_lightbox_cleaned.jpg", params);
+    saveDebugImage(binary, "lightbox_cleaned.jpg", params);
     
     // Get edges of the cleaned binary image
     Mat edges;
@@ -99,40 +747,30 @@ Mat ImageProcessor::detectLightboxBoundary(const Mat& grayImg, const ProcessingP
     return edges;
 }
 
-vector<Point> ImageProcessor::findBoundaryContour(const Mat& edgeImg, const ProcessingParams& params) {
-    cout << "[INFO] Finding lightbox boundary contour" << endl;
-    
-    vector<vector<Point>> contours;
+std::vector<cv::Point> ImageProcessor::findBoundaryContour(
+    const cv::Mat& edgeImg,
+    const ProcessingParams& params
+) {
+    // 1) Find all external contours in the edge image
+    std::vector<std::vector<cv::Point>> contours;
     findContours(edgeImg, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    
     if (contours.empty()) {
-        throw runtime_error("No contours found in edge image");
+        throw std::runtime_error("No boundary contours found");
     }
-    
-    cout << "[INFO] Found " << contours.size() << " contours for lightbox boundary" << endl;
-    
-    // For lightbox detection, we want the largest rectangular contour
-    // Lightbox should be the largest bright region in the image
-    vector<pair<int, double>> candidates;
-    
-    // Find largest contour by area (lightbox should be biggest bright region)
-    double maxArea = 0;
-    int bestIdx = -1;
-    
-    for (size_t i = 0; i < contours.size(); i++) {
-        double area = contourArea(contours[i]);
-        if (area > maxArea) {
-            maxArea = area;
-            bestIdx = static_cast<int>(i);
+
+    // 2) Pick the contour whose bounding‐rectangle has the largest area
+    size_t bestIdx = 0;
+    double bestArea = 0;
+    for (size_t i = 0; i < contours.size(); ++i) {
+        cv::Rect r = boundingRect(contours[i]);
+        double area = static_cast<double>(r.width) * r.height;
+        if (area > bestArea) {
+            bestArea = area;
+            bestIdx = i;
         }
     }
-    
-    if (bestIdx >= 0) {
-        cout << "[INFO] Selected lightbox contour with area: " << maxArea << endl;
-        return contours[bestIdx];
-    }
-    
-    throw runtime_error("No suitable lightbox boundary found");
+
+    return contours[bestIdx];
 }
 
 vector<Point2f> ImageProcessor::refineCorners(const vector<Point>& corners, 
@@ -165,152 +803,181 @@ vector<Point2f> ImageProcessor::refineCorners(const vector<Point>& corners,
 }
 
 vector<Point> ImageProcessor::findObjectContour(const Mat& warpedImg, const ProcessingParams& params) {
-    cout << "[INFO] Finding object contour in perspective-corrected image with enhanced thresholding" << endl;
+    if (params.verboseOutput) {
+        cout << "[INFO] Finding object contour with streamlined detection" << endl;
+    }
     
+    // Step 1: Convert to single-channel, medianBlur, CLAHE for lighting robustness
+    Mat gray;
+    if (warpedImg.channels() == 3) {
+        cvtColor(warpedImg, gray, COLOR_BGR2GRAY);
+    } else {
+        gray = warpedImg.clone();
+    }
+    
+    medianBlur(gray, gray, 5);
+    
+    auto clahe = createCLAHE();
+    clahe->setClipLimit(2.0);
+    clahe->setTilesGridSize(Size(8, 8));
+    clahe->apply(gray, gray);
+    
+    pushDebugImage(gray, "object_preprocessed", params);
+    
+    // Step 2: Collapse threshold logic - pick one method and run it once
     Mat binary;
-    double final_threshold;
-    
     if (params.useAdaptiveThreshold) {
-        cout << "[INFO] Using adaptive thresholding for object detection" << endl;
-        adaptiveThreshold(warpedImg, binary, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 21, 10);
-        final_threshold = -1; // Adaptive doesn't have single threshold
-        saveDebugImage(binary, "08a_object_binary_adaptive.jpg", params);
+        if (params.verboseOutput) cout << "[INFO] Using adaptive threshold" << endl;
+        adaptiveThreshold(gray, binary, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY_INV, 21, 10);
     } else if (params.manualThreshold > 0.0) {
-        cout << "[INFO] Using manual threshold: " << params.manualThreshold << endl;
-        final_threshold = params.manualThreshold;
-        threshold(warpedImg, binary, final_threshold, 255, THRESH_BINARY_INV);
-        saveDebugImage(binary, "08a_object_binary_manual.jpg", params);
+        if (params.verboseOutput) cout << "[INFO] Using manual threshold: " << params.manualThreshold << endl;
+        threshold(gray, binary, params.manualThreshold, 255, THRESH_BINARY_INV);
     } else {
-        // Use Otsu with optional offset
-        double otsu_thresh = threshold(warpedImg, binary, 0, 255, THRESH_BINARY_INV + THRESH_OTSU);
-        final_threshold = otsu_thresh + params.thresholdOffset;
-        
-        cout << "[INFO] Otsu threshold: " << otsu_thresh;
+        if (params.verboseOutput) cout << "[INFO] Using Otsu threshold" << endl;
+        double otsu_thresh = threshold(gray, binary, 0, 255, THRESH_BINARY_INV + THRESH_OTSU);
         if (params.thresholdOffset != 0.0) {
-            cout << ", with offset: " << params.thresholdOffset << ", final: " << final_threshold;
+            threshold(gray, binary, otsu_thresh + params.thresholdOffset, 255, THRESH_BINARY_INV);
+            if (params.verboseOutput) cout << "[INFO] Applied offset: " << params.thresholdOffset << endl;
         }
-        cout << endl;
-        
-        // Apply final threshold (may be different from Otsu if offset is used)
-        if (params.thresholdOffset != 0.0) {
-            threshold(warpedImg, binary, final_threshold, 255, THRESH_BINARY_INV);
-        }
-        
-        saveDebugImage(binary, "08a_object_binary.jpg", params);
     }
     
-    // Optionally clean up the binary image with morphological operations
+    pushDebugImage(binary, "object_thresholded", params);
+    
+    // Step 3: Morphology - close x2 → flood-fill holes → open x1
     if (!params.disableMorphology) {
-        cout << "[INFO] Applying morphological cleaning with kernel size: " << params.morphKernelSize << endl;
         Mat kernel = getStructuringElement(MORPH_ELLIPSE, Size(params.morphKernelSize, params.morphKernelSize));
-        morphologyEx(binary, binary, MORPH_CLOSE, kernel); // Fill small gaps
-        morphologyEx(binary, binary, MORPH_OPEN, kernel);  // Remove small noise
-        saveDebugImage(binary, "08b_object_cleaned.jpg", params);
-    } else {
-        cout << "[INFO] Morphological cleaning disabled - preserving original binary image" << endl;
-        saveDebugImage(binary, "08b_object_cleaned.jpg", params); // Save same as input for consistency
-    }
-    
-    // Find contours
-    vector<vector<Point>> contours;
-    findContours(binary, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
-    
-    if (contours.empty()) {
-        throw runtime_error("No object contours found in warped image");
-    }
-    
-    saveDebugImageWithContours(warpedImg, contours, "08c_all_contours.jpg", params);
-    
-    cout << "[INFO] Found " << contours.size() << " object contours" << endl;
-    
-    vector<Point> objectContour;
-    
-    if (params.mergeNearbyContours && contours.size() > 1) {
-        cout << "[INFO] Attempting to merge nearby contours (max distance: " << params.contourMergeDistanceMM << "mm)" << endl;
         
-        // Convert merge distance from mm to pixels
-        double pixelsPerMMWidth = static_cast<double>(warpedImg.cols) / params.lightboxWidthMM;
-        double pixelsPerMMHeight = static_cast<double>(warpedImg.rows) / params.lightboxHeightMM;
-        // Use average for diagonal measurements
-        double pixelsPerMM = (pixelsPerMMWidth + pixelsPerMMHeight) / 2.0;
-        double mergeDistancePx = params.contourMergeDistanceMM * pixelsPerMM;
+        // Close twice to fill gaps
+        morphologyEx(binary, binary, MORPH_CLOSE, kernel);
+        morphologyEx(binary, binary, MORPH_CLOSE, kernel);
         
-        objectContour = mergeNearbyContours(contours, mergeDistancePx, params);
-        
-        if (!objectContour.empty()) {
-            cout << "[INFO] Successfully merged contours into single object outline" << endl;
-        } else {
-            cout << "[WARN] Contour merging failed, falling back to largest contour" << endl;
+        // Flood-fill holes by finding interior contours and filling them
+        Mat holeFilled = binary.clone();
+        vector<vector<Point>> holes;
+        findContours(binary, holes, RETR_CCOMP, CHAIN_APPROX_SIMPLE);
+        for (size_t i = 0; i < holes.size(); i++) {
+            drawContours(holeFilled, holes, static_cast<int>(i), Scalar(255), FILLED);
         }
+        
+        // Open once to clean edges
+        morphologyEx(holeFilled, binary, MORPH_OPEN, kernel);
+        
+        pushDebugImage(binary, "object_morphology", params);
     }
     
-    // Fallback to single largest contour if merging failed or disabled
-    if (objectContour.empty()) {
-        cout << "[INFO] Using single largest contour approach" << endl;
+    // Step 4: Use connectedComponentsWithStats for efficient blob selection
+    Mat labels, stats, centroids;
+    int numComponents = connectedComponentsWithStats(binary, labels, stats, centroids);
+    
+    if (numComponents < 2) { // Background is component 0
+        throw runtime_error("No object components found");
+    }
+    
+    // Find components to use (single best or multiple for merging)
+    Mat componentMask;
+    
+    if (params.mergeNearbyContours) {
+        // Multi-component approach: find all valid components and merge nearby ones
+        vector<int> validComponents;
+        Point2f imageCenter(static_cast<float>(binary.cols / 2), static_cast<float>(binary.rows / 2));
         
-        double maxArea = 0;
-        int bestIdx = -1;
+        for (int i = 1; i < numComponents; i++) { // Skip background (component 0)
+            double area = stats.at<int>(i, CC_STAT_AREA);
+            if (area >= params.minContourArea) {
+                validComponents.push_back(i);
+            }
+        }
         
-        for (size_t i = 0; i < contours.size(); i++) {
-            double area = contourArea(contours[i]);
-            
-            // Must have reasonable area
+        if (validComponents.empty()) {
+            throw runtime_error("No valid object components found");
+        }
+        
+        // Create combined mask from all valid components
+        componentMask = Mat::zeros(binary.size(), CV_8U);
+        for (int comp : validComponents) {
+            Mat compMask = (labels == comp);
+            bitwise_or(componentMask, compMask, componentMask);
+        }
+        
+        if (params.verboseOutput) {
+            cout << "[INFO] Using " << validComponents.size() << " components for merging" << endl;
+        }
+    } else {
+        // Single-component approach: find best component by area/distance score
+        int bestComponent = -1;
+        double bestScore = 0;
+        Point2f imageCenter(static_cast<float>(binary.cols / 2), static_cast<float>(binary.rows / 2));
+        
+        for (int i = 1; i < numComponents; i++) { // Skip background (component 0)
+            double area = stats.at<int>(i, CC_STAT_AREA);
             if (area < params.minContourArea) continue;
             
-            // Check if contour is roughly centered (object should be in center after warping)
-            Moments m = moments(contours[i]);
-            if (m.m00 > 0) {
-                Point2f centroid(static_cast<float>(m.m10/m.m00), static_cast<float>(m.m01/m.m00));
-                Point2f imageCenter(static_cast<float>(warpedImg.cols/2), static_cast<float>(warpedImg.rows/2));
-                double distance = norm(centroid - imageCenter);
-                double maxDistance = min(warpedImg.cols, warpedImg.rows) * 0.4; // 40% of image size
-                
-                if (distance < maxDistance && area > maxArea) {
-                    maxArea = area;
-                    bestIdx = static_cast<int>(i);
-                }
+            Point2f centroid(centroids.at<double>(i, 0), centroids.at<double>(i, 1));
+            double distance = norm(centroid - imageCenter);
+            double normalizedDistance = distance / min(binary.cols, binary.rows);
+            
+            double score = area / (1.0 + normalizedDistance);
+            if (score > bestScore) {
+                bestScore = score;
+                bestComponent = i;
             }
         }
         
-        if (bestIdx < 0) {
-            // Fallback to largest contour regardless of position
-            cout << "[WARN] No well-centered contours found, using largest contour" << endl;
-            for (size_t i = 0; i < contours.size(); i++) {
-                double area = contourArea(contours[i]);
-                if (area > maxArea) {
-                    maxArea = area;
-                    bestIdx = static_cast<int>(i);
-                }
-            }
+        if (bestComponent < 0) {
+            throw runtime_error("No valid object component found");
         }
         
-        if (bestIdx < 0) {
-            throw runtime_error("No valid object contours found");
-        }
-        
-        objectContour = contours[bestIdx];
-        cout << "[INFO] Selected single contour with area: " << maxArea << endl;
+        // Create mask for the best component
+        componentMask = (labels == bestComponent);
+    }
+    pushDebugImage(componentMask, "object_component", params);
+    
+    // Step 5: Simple edge detection on the clean component mask
+    // The componentMask has a perfect white/black boundary - just find the edge
+    Mat edges;
+    Canny(componentMask, edges, 50, 150, 3);
+    
+    pushDebugImage(edges, "object_edges", params);
+    
+    // Find contours on the edge image for exact boundary tracing
+    vector<vector<Point>> contours;
+    findContours(edges, contours, RETR_EXTERNAL, CHAIN_APPROX_NONE);
+    
+    if (contours.empty()) {
+        throw runtime_error("No edge contours found");
     }
     
-    // Apply very conservative polygon approximation to preserve detail for CAD
-    vector<Point> approx;
+    // Get the largest contour (our object boundary)
+    vector<Point> objectContour = *max_element(contours.begin(), contours.end(),
+        [](const vector<Point>& a, const vector<Point>& b) {
+            return contourArea(a) < contourArea(b);
+        });
+    
+    // Apply ultra-minimal polygonal approximation for maximum smoothness
+    vector<Point> smoothedContour;
     double perimeter = arcLength(objectContour, true);
+    // Use even smaller epsilon for ultra-smooth curves
+    double epsilon = min(0.0005, params.polygonEpsilonFactor) * perimeter; // Cap at 0.05%
+    approxPolyDP(objectContour, smoothedContour, epsilon, true);
     
-    // Use much smaller epsilon to preserve more detail points
-    double epsilon = params.polygonEpsilonFactor * 0.25 * perimeter; // Very conservative
-    approxPolyDP(objectContour, approx, epsilon, true);
-    
-    // Only apply approximation if we have too many points (>100) and it doesn't reduce below reasonable detail
-    if (objectContour.size() > 100 && approx.size() >= objectContour.size() * 0.3) {
-        cout << "[INFO] Applied conservative polygon approximation" << endl;
-        cout << "[INFO] Object contour found with " << approx.size() << " vertices (from " << objectContour.size() << " original points)" << endl;
-        return approx;
-    } else {
-        // For smaller contours or when approximation removes too much detail, use original contour
-        cout << "[INFO] Preserving original contour detail (no approximation)" << endl;
-        cout << "[INFO] Object contour found with " << objectContour.size() << " vertices (original detail preserved)" << endl;
-        return objectContour;
+    if (params.verboseOutput) {
+        cout << "[INFO] Edge-based contour: " << objectContour.size() << " → " 
+             << smoothedContour.size() << " points" << endl;
     }
+    
+    objectContour = smoothedContour;
+    
+    // Step 6: Optional convex hull guard
+    if (params.forceConvex) {
+        if (params.verboseOutput) cout << "[INFO] Applying convex hull" << endl;
+        convexHull(objectContour, objectContour);
+    }
+    
+    if (params.verboseOutput) {
+        cout << "[INFO] Object contour smoothed and simplified: " << objectContour.size() << " points" << endl;
+    }
+    
+    return objectContour;
 }
 
 vector<Point2f> ImageProcessor::refineContour(const vector<Point>& contour,
@@ -375,7 +1042,7 @@ vector<Point> ImageProcessor::dilateContour(const vector<Point>& contour,
     vector<vector<Point>> contourVec = {adjustedContour};
     fillPoly(mask, contourVec, Scalar(255));
     
-    saveDebugImage(mask, "09a_contour_mask.jpg", params);
+    saveDebugImage(mask, "contour_mask.jpg", params);
     
     // Apply morphological dilation
     int kernelSize = static_cast<int>(dilationPixels * 2 + 1); // Ensure odd kernel size
@@ -385,7 +1052,7 @@ vector<Point> ImageProcessor::dilateContour(const vector<Point>& contour,
     Mat dilated;
     dilate(mask, dilated, kernel);
     
-    saveDebugImage(dilated, "09b_dilated_mask.jpg", params);
+    saveDebugImage(dilated, "dilated_mask.jpg", params);
     
     // Extract the dilated contour
     vector<vector<Point>> dilatedContours;
@@ -445,7 +1112,7 @@ vector<Point> ImageProcessor::smoothContour(const vector<Point>& contour,
 vector<Point> ImageProcessor::smoothContourCurvatureBased(const vector<Point>& contour,
                                                          double smoothingMM, double pixelsPerMM,
                                                          const ProcessingParams& params) {
-    cout << "[INFO] Using curvature-based smoothing (preserves detail better)" << endl;
+    cout << "[INFO] Using multi-pass curvature-based smoothing for ultra-smooth results" << endl;
     
     // Convert smoothing from mm to pixels
     double smoothingPixels = smoothingMM * pixelsPerMM;
@@ -536,7 +1203,7 @@ vector<Point> ImageProcessor::smoothContourCurvatureBased(const vector<Point>& c
         }
         polylines(vis, vector<vector<Point>>{smoothVis}, true, Scalar(0, 255, 0), 2);
         
-        saveDebugImage(vis, "10_smoothing_comparison.jpg", params);
+        saveDebugImage(vis, "smoothing_comparison.jpg", params);
     }
     
     cout << "[INFO] Curvature-based smoothing complete. Original: " << contour.size() << " points, Smoothed: " << finalContour.size() << " points" << endl;
@@ -574,7 +1241,7 @@ vector<Point> ImageProcessor::smoothContourMorphological(const vector<Point>& co
     vector<vector<Point>> contourVec = {adjustedContour};
     fillPoly(mask, contourVec, Scalar(255));
     
-    saveDebugImage(mask, "10a_morph_smooth_mask.jpg", params);
+    saveDebugImage(mask, "morph_smooth_mask.jpg", params);
     
     // Apply morphological operations for smoothing
     int kernelSize = static_cast<int>(smoothingPixels * 2 + 1);
@@ -589,7 +1256,7 @@ vector<Point> ImageProcessor::smoothContourMorphological(const vector<Point>& co
     // Apply opening (erosion followed by dilation) to smooth out small protrusions
     morphologyEx(smoothed, smoothed, MORPH_OPEN, kernel);
     
-    saveDebugImage(smoothed, "10b_morph_smoothed_mask.jpg", params);
+    saveDebugImage(smoothed, "morph_smoothed_mask.jpg", params);
     
     // Extract the smoothed contour
     vector<vector<Point>> smoothedContours;
@@ -788,6 +1455,64 @@ void ImageProcessor::saveDebugImageWithCleanContour(const Mat& image, const vect
     }
 }
 
+void ImageProcessor::pushDebugImage(const Mat& image, const string& name, const ProcessingParams& params) {
+    if (!params.enableDebugOutput || !params.verboseOutput) return;
+    
+    // Push a copy of the image and name onto the stack
+    params.debugImageStack.emplace_back(image.clone(), name);
+}
+
+void ImageProcessor::pushDebugContour(const Mat& image, const vector<Point>& contour, 
+                                     const string& name, const ProcessingParams& params) {
+    if (!params.enableDebugOutput || !params.verboseOutput) return;
+    
+    Mat debugImg;
+    if (image.channels() == 1) {
+        cvtColor(image, debugImg, COLOR_GRAY2BGR);
+    } else {
+        debugImg = image.clone();
+    }
+    
+    // Draw contour in bright green
+    vector<vector<Point>> contourVec = {contour};
+    drawContours(debugImg, contourVec, 0, Scalar(0, 255, 0), 3);
+    
+    // Push the annotated image to the stack
+    params.debugImageStack.emplace_back(debugImg, name);
+}
+
+void ImageProcessor::flushDebugStack(const ProcessingParams& params) {
+    if (!params.enableDebugOutput || params.debugImageStack.empty()) return;
+    
+    cout << "[DEBUG] Flushing " << params.debugImageStack.size() << " debug images..." << endl;
+    
+    // Create debug directory if it doesn't exist
+    string createDirCommand = "mkdir -p \"" + params.debugOutputPath + "\"";
+    system(createDirCommand.c_str());
+    
+    // Save all images with sequential numbering
+    for (size_t i = 0; i < params.debugImageStack.size(); i++) {
+        const auto& [image, name] = params.debugImageStack[i];
+        
+        // Format: 01_name.jpg, 02_name.jpg, etc.
+        char indexStr[4];
+        snprintf(indexStr, sizeof(indexStr), "%02zu", i + 1);
+        string filename = string(indexStr) + "_" + name + ".jpg";
+        string fullPath = params.debugOutputPath + filename;
+        
+        bool success = imwrite(fullPath, image);
+        if (success) {
+            cout << "[DEBUG] Saved: " << filename << endl;
+        } else {
+            cout << "[WARNING] Failed to save: " << filename << endl;
+        }
+    }
+    
+    // Clear the stack after flushing
+    params.debugImageStack.clear();
+    cout << "[DEBUG] Debug stack flushed and cleared" << endl;
+}
+
 // Legacy methods (for backward compatibility)
 
 Mat ImageProcessor::thresholdImage(const Mat& img, int threshValue) {
@@ -807,18 +1532,98 @@ vector<Point> ImageProcessor::findLargestContour(const Mat& binaryImg) {
         throw runtime_error("No contours found in the image.");
     }
 
-    double maxArea = 0.0;
-    int maxIdx = -1;
+    // For paper boundary detection, use smarter selection criteria
+    double bestScore = 0.0;
+    int bestIdx = -1;
+    int validContours = 0;
+    
+    
     for (size_t i = 0; i < contours.size(); i++) {
         double area = contourArea(contours[i]);
-        if (area > maxArea) {
-            maxArea = area;
-            maxIdx = static_cast<int>(i);
+        double perimeter = arcLength(contours[i], true);
+        
+        // Skip tiny contours
+        if (area < 1000) {
+            continue;
+        }
+        
+        // Check bounds
+        Rect bounds = cv::boundingRect(contours[i]);
+        double widthRatio = static_cast<double>(bounds.width) / binaryImg.cols;
+        double heightRatio = static_cast<double>(bounds.height) / binaryImg.rows;
+        
+        // Skip contours that span most of the image (likely image boundary, not paper)
+        if (widthRatio > 0.95 || heightRatio > 0.95) {
+            continue;
+        }
+        
+        // Check for border touching - be more lenient for paper detection
+        bool touchesBorder = false;
+        const int borderMargin = 5; // Reduced margin for paper detection
+        if (bounds.x <= borderMargin || bounds.y <= borderMargin || 
+            bounds.x + bounds.width >= binaryImg.cols - borderMargin || 
+            bounds.y + bounds.height >= binaryImg.rows - borderMargin) {
+            touchesBorder = true;
+        }
+        
+        // For paper detection, we're more tolerant of border touching
+        // Only skip if it really looks like the image boundary
+        if (touchesBorder && (widthRatio > 0.9 || heightRatio > 0.9)) {
+            continue;
+        }
+        
+        validContours++;
+        
+        // Test if it can be approximated to a rectangle (4 corners)
+        vector<Point> approx;
+        double epsilon = 0.02 * perimeter;
+        approxPolyDP(contours[i], approx, epsilon, true);
+        
+        // Calculate score based on:
+        // 1. Area (larger is better for paper)
+        // 2. Rectangularity (4 corners is ideal, but don't exclude others)
+        // 3. Aspect ratio (should be reasonable for A4 paper)
+        double aspectRatio = static_cast<double>(bounds.width) / bounds.height;
+        double aspectPenalty = 1.0;
+        
+        // A4 paper is about 1.4:1 ratio, so penalize extreme ratios less harshly
+        if (aspectRatio > 5.0 || aspectRatio < 0.2) {
+            aspectPenalty = 0.3; // Harsh penalty for very extreme ratios
+        } else if (aspectRatio > 3.0 || aspectRatio < 0.33) {
+            aspectPenalty = 0.7; // Moderate penalty for somewhat extreme ratios
+        }
+        
+        double areaScore = area / (binaryImg.rows * binaryImg.cols); // Normalize by image size
+        double rectangularityScore = (approx.size() == 4) ? 1.0 : 0.8; // Prefer 4-sided but don't exclude others
+        
+        double score = areaScore * rectangularityScore * aspectPenalty;
+        
+        
+        if (score > bestScore) {
+            bestScore = score;
+            bestIdx = static_cast<int>(i);
         }
     }
     
-    cout << "[INFO] Found " << contours.size() << " contours; selecting the largest." << endl;
-    return contours[maxIdx];
+    
+    if (bestIdx < 0) {
+        // Fallback to largest area if smart selection fails
+        cout << "[WARN] Smart selection failed, falling back to largest area" << endl;
+        double maxArea = 0.0;
+        for (size_t i = 0; i < contours.size(); i++) {
+            double area = contourArea(contours[i]);
+            if (area > maxArea) {
+                maxArea = area;
+                bestIdx = static_cast<int>(i);
+            }
+        }
+    }
+    
+    cout << "[INFO] Found " << contours.size() << " contours; selected contour " << bestIdx 
+         << " with score " << bestScore << endl;
+    
+    
+    return contours[bestIdx];
 }
 
 vector<Point> ImageProcessor::approximatePolygon(const vector<Point>& contour, double epsilonFactor) {
@@ -942,114 +1747,18 @@ vector<Point> ImageProcessor::findMainContour(const Mat& binaryImg) {
 }
 
 vector<Point> ImageProcessor::processImageToContour(const string& inputPath, const ProcessingParams& params) {
-    cout << "[INFO] Starting improved CAD-optimized image processing pipeline..." << endl;
-
-    // Load and prepare image
-    Mat img = loadImage(inputPath);
-    Mat gray = convertToGrayscale(img);
+    cout << "[INFO] Starting CAD-optimized image processing pipeline..." << endl;
     
-    // Create debug output directory
-    if (params.enableDebugOutput) {
-        // Create debug directory
-        system(("mkdir -p " + params.debugOutputPath).c_str());
-        cout << "[DEBUG] Debug output enabled, saving to: " << params.debugOutputPath << endl;
-    }
-    
-    // Save original images
-    saveDebugImage(img, "01_original.jpg", params);
-    saveDebugImage(gray, "02_grayscale.jpg", params);
-    
-    // Step 1: Normalize lighting using CLAHE
-    Mat normalized = normalizeLighting(gray, params);
-    saveDebugImage(normalized, "03_normalized.jpg", params);
-    
-    // Step 2: Detect lightbox boundary (specialized for backlit white square)
-    Mat lightboxEdges = detectLightboxBoundary(normalized, params);
-    saveDebugImage(lightboxEdges, "04_lightbox_edges.jpg", params);
-    
-    // Step 3: Find boundary contour for perspective correction
-    vector<Point> boundaryContour = findBoundaryContour(lightboxEdges, params);
-    saveDebugImageWithBoundary(gray, boundaryContour, "05_boundary_contour.jpg", params);
-    
-    // Use more aggressive approximation for boundary detection (need exactly 4 corners)
-    vector<Point> approxBoundary;
-    double epsilon_factor = 0.02; // Start with 2% for boundary detection
-    int max_attempts = 10;
-    
-    for (int attempt = 0; attempt < max_attempts; attempt++) {
-        approxBoundary = approximatePolygon(boundaryContour, epsilon_factor);
-        cout << "[INFO] Boundary approximation attempt " << (attempt + 1) 
-             << " with epsilon " << epsilon_factor << " -> " << approxBoundary.size() << " vertices" << endl;
-        
-        if (approxBoundary.size() == 4) {
-            break; // Found 4 corners!
-        } else if (approxBoundary.size() > 4) {
-            epsilon_factor += 0.01; // Increase epsilon to get fewer vertices
-        } else {
-            epsilon_factor -= 0.005; // Decrease epsilon to get more vertices
-            if (epsilon_factor <= 0.005) break; // Don't go too low
-        }
-    }
-    
-    // If we still don't have 4 corners, try a different approach
-    if (approxBoundary.size() != 4) {
-        cout << "[WARN] Could not find 4-corner boundary, attempting convex hull approach..." << endl;
-        vector<Point> hull;
-        convexHull(boundaryContour, hull);
-        approxBoundary = approximatePolygon(hull, 0.02);
-        cout << "[INFO] Convex hull approach resulted in " << approxBoundary.size() << " vertices" << endl;
-        
-        // Final fallback: use bounding rectangle
-        if (approxBoundary.size() != 4) {
-            cout << "[WARN] Using bounding rectangle as final fallback..." << endl;
-            Rect boundingRect = cv::boundingRect(boundaryContour);
-            approxBoundary = {
-                Point(boundingRect.x, boundingRect.y),
-                Point(boundingRect.x + boundingRect.width, boundingRect.y),
-                Point(boundingRect.x + boundingRect.width, boundingRect.y + boundingRect.height),
-                Point(boundingRect.x, boundingRect.y + boundingRect.height)
-            };
-            cout << "[INFO] Bounding rectangle created with 4 corners" << endl;
-        }
-    }
-    
-    // Save boundary approximation results
-    saveDebugImageWithBoundary(gray, approxBoundary, "06_boundary_approximated.jpg", params);
-    
-    // Step 4: Refine corners with sub-pixel accuracy
-    vector<Point2f> refinedCorners = refineCorners(approxBoundary, normalized, params);
-    
-    // Step 5: Warp perspective using the original grayscale image (not binary!)
-    auto [warped, pixelsPerMM] = warpImage(normalized, refinedCorners, 
-                                          cv::Size(params.lightboxWidthPx, params.lightboxHeightPx), 
-                                          params.lightboxWidthMM, params.lightboxHeightMM);
-    saveDebugImage(warped, "07_warped.jpg", params);
-    
-    // Step 6: Find object contour in warped image
-    vector<Point> objectContour = findObjectContour(warped, params);
-    saveDebugImageWithCleanContour(warped, objectContour, "08_object_contour.jpg", params);
-    
-    // Step 7: Apply smoothing for easier 3D printing if requested
-    if (params.enableSmoothing) {
-        objectContour = smoothContour(objectContour, params.smoothingAmountMM, pixelsPerMM, params);
-        saveDebugImageWithCleanContour(warped, objectContour, "09_smoothed_contour.jpg", params);
-    }
-    
-    // Step 8: Apply dilation for 3D printing tolerance if requested
-    if (params.dilationAmountMM > 0.0) {
-        objectContour = dilateContour(objectContour, params.dilationAmountMM, pixelsPerMM, params);
-        string filename = params.enableSmoothing ? "10_dilated_contour.jpg" : "09_dilated_contour.jpg";
-        saveDebugImageWithCleanContour(warped, objectContour, filename, params);
-    }
-    
-    // Step 9: Validate the contour for CAD suitability
-    if (!validateContour(objectContour, params)) {
-        throw runtime_error("Generated contour failed validation checks");
-    }
+    // Use processImageToStage with final stage (7 = PRINT_TRACE_STAGE_FINAL)
+    auto [warpedImg, finalContour] = processImageToStage(inputPath, params, 7);
     
     cout << "[INFO] CAD-optimized image processing pipeline completed successfully." << endl;
-    cout << "[INFO] Final contour has " << objectContour.size() << " points" << endl;
-    return objectContour;
+    cout << "[INFO] Final contour has " << finalContour.size() << " points" << endl;
+    
+    // Flush all debug images at the end
+    flushDebugStack(params);
+    
+    return finalContour;
 }
 
 vector<Point> ImageProcessor::processImageToContour(const string& inputPath) {
@@ -1069,8 +1778,8 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
     Mat grayImg = convertToGrayscale(originalImg);
     
     // Save debug image for original
-    saveDebugImage(originalImg, "00_original.jpg", params);
-    saveDebugImage(grayImg, "01_grayscale.jpg", params);
+    pushDebugImage(originalImg, "original", params);
+    pushDebugImage(grayImg, "grayscale", params);
     
     if (target_stage == 0) { // PRINT_TRACE_STAGE_LOADED
         return {grayImg.clone(), {}};
@@ -1079,13 +1788,13 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
     // Stage 1: Process to lightbox cropped (perspective correction)
     // First we need to detect the lightbox boundary
     Mat normalizedImg = normalizeLighting(grayImg, params);
-    saveDebugImage(normalizedImg, "02_normalized.jpg", params);
+    pushDebugImage(normalizedImg, "normalized", params);
     
-    Mat boundaryEdges = detectLightboxBoundary(normalizedImg, params);
-    saveDebugImage(boundaryEdges, "03_boundary_edges.jpg", params);
+    Mat boundaryEdges = detectEdges(normalizedImg, originalImg, params);
+    pushDebugImage(boundaryEdges, "boundary_edges", params);
     
     vector<Point> boundaryContour = findBoundaryContour(boundaryEdges, params);
-    saveDebugImageWithBoundary(boundaryEdges, boundaryContour, "04_boundary_contour.jpg", params);
+    // Note: boundary contour visualization not yet converted to stack
     
     // Approximate to 4 corners with iterative refinement
     vector<Point> corners;
@@ -1113,15 +1822,98 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
         corners = approximatePolygon(hull, 0.02);
         
         if (corners.size() != 4) {
-            // Fallback 2: Use bounding rectangle corners
-            Rect boundingRect = cv::boundingRect(boundaryContour);
-            corners = {
-                Point(boundingRect.x, boundingRect.y),
-                Point(boundingRect.x + boundingRect.width, boundingRect.y),
-                Point(boundingRect.x + boundingRect.width, boundingRect.y + boundingRect.height),
-                Point(boundingRect.x, boundingRect.y + boundingRect.height)
-            };
-            cout << "[INFO] Using bounding rectangle as fallback" << endl;
+            // Fallback 2: Find actual corners using min/max coordinates from contour
+            // This is more accurate than bounding rectangle for non-axis-aligned rectangles
+            cout << "[INFO] Finding corners from contour extremes" << endl;
+            
+            // Find the four extreme points of the contour
+            auto minXPoint = *min_element(boundaryContour.begin(), boundaryContour.end(), 
+                [](const Point& a, const Point& b) { return a.x < b.x; });
+            auto maxXPoint = *max_element(boundaryContour.begin(), boundaryContour.end(), 
+                [](const Point& a, const Point& b) { return a.x < b.x; });
+            auto minYPoint = *min_element(boundaryContour.begin(), boundaryContour.end(), 
+                [](const Point& a, const Point& b) { return a.y < b.y; });
+            auto maxYPoint = *max_element(boundaryContour.begin(), boundaryContour.end(), 
+                [](const Point& a, const Point& b) { return a.y < b.y; });
+            
+            // Find the four corner candidates by combining extremes
+            vector<Point> cornerCandidates;
+            for (const Point& pt : boundaryContour) {
+                // Check if this point is close to being a corner (near extremes)
+                bool isCorner = false;
+                
+                // Top-left corner candidate (low x, low y)
+                if (abs(pt.x - minXPoint.x) < 50 && abs(pt.y - minYPoint.y) < 50) isCorner = true;
+                // Top-right corner candidate (high x, low y)  
+                else if (abs(pt.x - maxXPoint.x) < 50 && abs(pt.y - minYPoint.y) < 50) isCorner = true;
+                // Bottom-right corner candidate (high x, high y)
+                else if (abs(pt.x - maxXPoint.x) < 50 && abs(pt.y - maxYPoint.y) < 50) isCorner = true;
+                // Bottom-left corner candidate (low x, high y)
+                else if (abs(pt.x - minXPoint.x) < 50 && abs(pt.y - maxYPoint.y) < 50) isCorner = true;
+                
+                if (isCorner) {
+                    cornerCandidates.push_back(pt);
+                }
+            }
+            
+            if (cornerCandidates.size() >= 4) {
+                // Sort candidates to get the best 4 corners
+                // Sort by distance from center to get corner ordering
+                Point center(0, 0);
+                for (const Point& pt : cornerCandidates) {
+                    center.x += pt.x;
+                    center.y += pt.y;
+                }
+                center.x /= cornerCandidates.size();
+                center.y /= cornerCandidates.size();
+                
+                // Sort by angle from center to get proper ordering
+                sort(cornerCandidates.begin(), cornerCandidates.end(), 
+                     [center](const Point& a, const Point& b) {
+                         double angleA = atan2(a.y - center.y, a.x - center.x);
+                         double angleB = atan2(b.y - center.y, b.x - center.x);
+                         return angleA < angleB;
+                     });
+                
+                corners = {cornerCandidates[0], cornerCandidates[1], cornerCandidates[2], cornerCandidates[3]};
+                cout << "[INFO] Found " << cornerCandidates.size() << " corner candidates, using first 4" << endl;
+            } else {
+                // Alternative approach: Find the largest inscribed rectangle
+                // This works better for paper boundaries with complex edges
+                cout << "[INFO] Finding largest inscribed rectangle within paper boundary" << endl;
+                
+                // Find the inner bounds of the paper by looking for the largest clear rectangular area
+                // We'll do this by finding the min/max coordinates that have enough support
+                
+                vector<int> xCoords, yCoords;
+                for (const Point& pt : boundaryContour) {
+                    xCoords.push_back(pt.x);
+                    yCoords.push_back(pt.y);
+                }
+                
+                sort(xCoords.begin(), xCoords.end());
+                sort(yCoords.begin(), yCoords.end());
+                
+                // Use percentiles to find the inner rectangle bounds
+                // This filters out outlier points from noise
+                size_t xSize = xCoords.size();
+                size_t ySize = yCoords.size();
+                
+                int x1 = xCoords[xSize * 0.1];  // 10th percentile
+                int x2 = xCoords[xSize * 0.9];  // 90th percentile  
+                int y1 = yCoords[ySize * 0.1];  // 10th percentile
+                int y2 = yCoords[ySize * 0.9];  // 90th percentile
+                
+                corners = {
+                    Point(x1, y1),    // Top-left
+                    Point(x2, y1),    // Top-right  
+                    Point(x2, y2),    // Bottom-right
+                    Point(x1, y2)     // Bottom-left
+                };
+                
+                cout << "[INFO] Using inscribed rectangle from (" << x1 << "," << y1 
+                     << ") to (" << x2 << "," << y2 << ")" << endl;
+            }
         } else {
             cout << "[INFO] Convex hull fallback successful" << endl;
         }
@@ -1130,12 +1922,25 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
     // Refine corners with sub-pixel accuracy
     vector<Point2f> refinedCorners = refineCorners(corners, normalizedImg, params);
     
+    // 5. Log warp dimensions
+    cout << "[INFO] Warping from "
+         << grayImg.cols << "x" << grayImg.rows 
+         << " px to "
+         << params.lightboxWidthPx << "x" << params.lightboxHeightPx
+         << " px ("
+         << params.lightboxWidthMM << "mm x " << params.lightboxHeightMM << "mm)"
+         << endl;
+
     // Warp image using the original grayscale (not binary) for better quality
-    auto [warpedImg, pixelsPerMM] = warpImage(grayImg, refinedCorners, 
-                                             cv::Size(params.lightboxWidthPx, params.lightboxHeightPx),
-                                             params.lightboxWidthMM, params.lightboxHeightMM);
+    auto [warpedImg, pixelsPerMM] = warpImage(
+        grayImg,
+        refinedCorners,
+        cv::Size(params.lightboxWidthPx, params.lightboxHeightPx),
+        params.lightboxWidthMM,
+        params.lightboxHeightMM
+    );
     
-    saveDebugImage(warpedImg, "05_perspective_corrected.jpg", params);
+    pushDebugImage(warpedImg, "perspective_corrected", params);
     
     if (target_stage == 1) { // PRINT_TRACE_STAGE_LIGHTBOX_CROPPED
         return {warpedImg.clone(), {}};
@@ -1143,7 +1948,7 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
     
     // Stage 2: Normalized (already done above, just return warped + normalized)
     Mat warpedNormalized = normalizeLighting(warpedImg, params);
-    saveDebugImage(warpedNormalized, "06_warped_normalized.jpg", params);
+    pushDebugImage(warpedNormalized, "warped_normalized", params);
     
     if (target_stage == 2) { // PRINT_TRACE_STAGE_NORMALIZED
         return {warpedNormalized.clone(), {}};
@@ -1161,7 +1966,7 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
     
     // Stage 4: Object detected
     vector<Point> objectContour = findObjectContour(warpedImg, params);
-    saveDebugImageWithCleanContour(warpedImg, objectContour, "07_object_contour.jpg", params);
+    pushDebugContour(warpedImg, objectContour, "object_contour", params);
     
     if (target_stage == 4) { // PRINT_TRACE_STAGE_OBJECT_DETECTED
         return {warpedImg.clone(), objectContour};
@@ -1171,7 +1976,7 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
     vector<Point> processedContour = objectContour;
     if (params.enableSmoothing) {
         processedContour = smoothContour(processedContour, params.smoothingAmountMM, pixelsPerMM, params);
-        saveDebugImageWithCleanContour(warpedImg, processedContour, "08_smoothed_contour.jpg", params);
+        pushDebugContour(warpedImg, processedContour, "smoothed_contour", params);
     }
     
     if (target_stage == 5) { // PRINT_TRACE_STAGE_SMOOTHED
@@ -1181,7 +1986,7 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
     // Stage 6: Dilated (if enabled)
     if (params.dilationAmountMM > 0.0) {
         processedContour = dilateContour(processedContour, params.dilationAmountMM, pixelsPerMM, params);
-        saveDebugImageWithCleanContour(warpedImg, processedContour, "09_dilated_contour.jpg", params);
+        pushDebugContour(warpedImg, processedContour, "dilated_contour", params);
     }
     
     if (target_stage == 6) { // PRINT_TRACE_STAGE_DILATED
@@ -1193,7 +1998,10 @@ std::pair<cv::Mat, std::vector<cv::Point>> ImageProcessor::processImageToStage(
         throw runtime_error("Final contour validation failed");
     }
     
-    saveDebugImageWithCleanContour(warpedImg, processedContour, "10_final_contour.jpg", params);
+    pushDebugContour(warpedImg, processedContour, "final_contour", params);
+    
+    // Flush all debug images at the end
+    flushDebugStack(params);
     
     return {warpedImg.clone(), processedContour};
 }
@@ -1239,7 +2047,7 @@ vector<Point> ImageProcessor::mergeNearbyContours(const vector<vector<Point>>& c
         cout << "[INFO] Applied morphological closing with kernel size: " << kernelSize << endl;
     }
     
-    saveDebugImage(mask, "08d_merged_mask.jpg", params);
+    saveDebugImage(mask, "merged_mask.jpg", params);
     
     // Find contours on the merged mask
     vector<vector<Point>> mergedContours;
